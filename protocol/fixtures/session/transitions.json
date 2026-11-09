@@ -1,0 +1,30 @@
+{
+  "description": "Session phase transitions shared by the Swift and Kotlin state machines. Every row is executed as a test on both sides so the two implementations cannot drift.",
+  "transitions": [
+    { "from": "disconnected", "event": "connect", "to": "connecting", "actions": [] },
+    { "from": "connecting", "event": "tlsReady", "to": "authenticating", "actions": [] },
+    { "from": "connecting", "event": "tlsFailed", "to": "disconnected", "actions": ["scheduleReconnect"] },
+    { "from": "authenticating", "event": "pairRequest", "to": "unpaired", "actions": [] },
+    { "from": "authenticating", "event": "helloReceived", "to": "ready", "actions": ["sendHelloOk", "startHeartbeat"] },
+    { "from": "authenticating", "event": "tlsFailed", "to": "disconnected", "actions": ["scheduleReconnect"] },
+    { "from": "unpaired", "event": "pairRequest", "to": "pairing", "actions": [] },
+    { "from": "unpaired", "event": "messageReceived", "to": "closing", "actions": ["sendErrorUnpaired", "closeConnection"] },
+    { "from": "pairing", "event": "pairAccepted", "to": "paired", "actions": ["sendPairOk", "sendHello"] },
+    { "from": "pairing", "event": "pairRejected", "to": "closing", "actions": ["closeConnection"] },
+    { "from": "paired", "event": "helloReceived", "to": "ready", "actions": ["sendHelloOk", "startHeartbeat"] },
+    { "from": "paired", "event": "helloAcked", "to": "ready", "actions": ["startHeartbeat"] },
+    { "from": "ready", "event": "helloReceived", "to": "ready", "actions": ["sendHelloOk"] },
+    { "from": "ready", "event": "pingReceived", "to": "ready", "actions": [] },
+    { "from": "ready", "event": "messageReceived", "to": "ready", "actions": [] },
+    { "from": "ready", "event": "disconnect", "to": "disconnected", "actions": ["stopHeartbeat", "scheduleReconnect"] },
+    { "from": "ready", "event": "pingTimeout", "to": "disconnected", "actions": ["stopHeartbeat", "closeConnection", "scheduleReconnect"] },
+    { "from": "closing", "event": "close", "to": "closed", "actions": ["stopHeartbeat"] }
+  ],
+  "pinMismatch": {
+    "from": ["connecting", "authenticating"],
+    "event": "tlsFailed",
+    "reason": "pinMismatch",
+    "to": "closed",
+    "actions": ["stopReconnect"]
+  }
+}
