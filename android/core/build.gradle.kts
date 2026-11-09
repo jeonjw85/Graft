@@ -11,6 +11,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.okhttp)
+    implementation(libs.bouncycastle.bcpkix)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
