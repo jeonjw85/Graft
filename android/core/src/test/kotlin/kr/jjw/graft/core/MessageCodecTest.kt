@@ -26,7 +26,7 @@ class MessageCodecTest {
     @Test
     fun `round trip all fixtures`() {
         val names = FixtureLoader.names()
-        assertEquals(15, names.size, "every fixture must round-trip")
+        assertEquals(16, names.size, "every fixture must round-trip")
 
         for (name in names) {
             val decoded = MessageCodec.decode(FixtureLoader.bytes(name))

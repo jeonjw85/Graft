@@ -137,7 +137,7 @@
       "type": "object",
       "required": ["token", "deviceId", "name", "platform"],
       "properties": {
-        "token": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,128}$" },
+        "token": { "type": "string", "pattern": "^([0-9]{6}|[A-Za-z0-9_-]{16,128})$" },
         "deviceId": { "$ref": "#/$defs/deviceId" },
         "name": { "$ref": "#/$defs/deviceName" },
         "platform": { "const": "android" }

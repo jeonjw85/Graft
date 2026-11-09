@@ -95,7 +95,7 @@ If `v` is not `1`, the receiver sends `error{code:"proto_unsupported"}` and clos
 
 | Field | Type | Description |
 |---|---|---|
-| `token` | string (base64url, 16-128) | Single-use token from the QR code |
+| `token` | string (base64url, 16-128, or six digits) | Single-use token from the QR code, or the six-digit fallback code |
 | `deviceId` | string (1-64) | Android device identifier |
 | `name` | string (1-64) | Device name |
 | `platform` | `"android"` | Platform |
