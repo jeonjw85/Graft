@@ -4,7 +4,10 @@ Graft에 관심을 가져 주셔서 감사합니다. 이 문서는 개발 환경
 
 ## 개발 환경
 
-- **macOS:** Swift 6.x. 프로토콜 모듈은 SwiftPM만으로 빌드·테스트할 수 있습니다. 앱을 빌드하려면 Xcode가 필요합니다.
+- **macOS:** Swift 6.x. SwiftPM 테스트는 XCTest를 사용하므로 **Xcode가 필요합니다**. `xcode-select`가 Command Line Tools를 가리키고 있다면 다음처럼 실행하세요.
+  ```bash
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --package-path macos
+  ```
 - **Android:** JDK 21과 Gradle wrapper를 사용합니다. 시스템에 설치된 Gradle로 wrapper를 생성할 수 있습니다.
 - **프로토콜 검증:** Node.js 20 이상 (스키마 검증에 `ajv-cli`를 `npx`로 실행)
 
