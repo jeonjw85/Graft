@@ -100,4 +100,54 @@ final class MessageCodecTests: XCTestCase {
         let json = try XCTUnwrap(String(data: encoded, encoding: .utf8))
         XCTAssertFalse(json.contains("\"re\""))
     }
+
+    func testRejectsInvalidUTF8InsideString() {
+        var data = Data(#"{"v":1,"id":"x","type":"clipboard.update","ts":1,"payload":{"body":"a"#.utf8)
+        data.append(0xFF)
+        data.append(contentsOf: Data(#""}}"#.utf8))
+
+        XCTAssertThrowsError(try MessageCodec.decode(data)) { error in
+            XCTAssertEqual(error as? CodecError, .malformed("invalid utf8 or json"))
+        }
+    }
+
+    func testRejectsMissingRequiredFields() {
+        let cases = [
+            #"{"id":"x","type":"ping","ts":1,"payload":{}}"#,
+            #"{"v":1,"id":"x","type":"ping","ts":1}"#
+        ]
+        for json in cases {
+            XCTAssertThrowsError(try MessageCodec.decode(Data(json.utf8))) { error in
+                XCTAssertEqual(error as? CodecError, .malformed("invalid utf8 or json"))
+            }
+        }
+    }
+
+    func testRejectsExcessiveNesting() {
+        let nested = String(repeating: "[", count: 100) + String(repeating: "]", count: 100)
+        let json = #"{"v":1,"id":"x","type":"future.event","ts":1,"payload":"# + nested + "}"
+
+        XCTAssertThrowsError(try MessageCodec.decode(Data(json.utf8))) { error in
+            XCTAssertEqual(error as? CodecError, .malformed("invalid utf8 or json"))
+        }
+    }
+
+    func testRejectsLoneSurrogateEscape() {
+        let json = #"{"v":1,"id":"x","type":"clipboard.update","ts":1,"payload":{"body":"\ud83d"}}"#
+
+        XCTAssertThrowsError(try MessageCodec.decode(Data(json.utf8))) { error in
+            XCTAssertEqual(error as? CodecError, .malformed("invalid utf8 or json"))
+        }
+    }
+
+    func testAcceptsValidSurrogatePairEscape() throws {
+        let json = #"{"v":1,"id":"x","type":"clipboard.update","ts":1,"payload":{"body":"\ud83d\ude00"}}"#
+
+        let envelope = try MessageCodec.decode(Data(json.utf8))
+
+        guard case .object(let payload) = envelope.payload else {
+            return XCTFail("payload is not an object")
+        }
+        XCTAssertEqual(payload["body"], .string("😀"))
+    }
 }

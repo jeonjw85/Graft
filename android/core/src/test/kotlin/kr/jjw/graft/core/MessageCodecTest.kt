@@ -129,6 +129,62 @@ class MessageCodecTest {
         assertFalse(encoded.contains("\"re\""))
         assertFalse(encoded.contains("null"))
     }
+
+    @Test
+    fun `reject invalid utf8 inside string`() {
+        val prefix = """{"v":1,"id":"x","type":"clipboard.update","ts":1,"payload":{"body":"a""".toByteArray()
+        val bytes = prefix + byteArrayOf(0xFF.toByte()) + """"}}""".toByteArray()
+
+        assertEquals(
+            CodecException.Kind.MALFORMED,
+            assertThrows<CodecException> { MessageCodec.decode(bytes) }.kind
+        )
+    }
+
+    @Test
+    fun `reject missing required fields`() {
+        val cases = listOf(
+            """{"id":"x","type":"ping","ts":1,"payload":{}}""".toByteArray(),
+            """{"v":1,"id":"x","type":"ping","ts":1}""".toByteArray()
+        )
+
+        for (bytes in cases) {
+            assertEquals(
+                CodecException.Kind.MALFORMED,
+                assertThrows<CodecException> { MessageCodec.decode(bytes) }.kind
+            )
+        }
+    }
+
+    @Test
+    fun `reject excessive nesting`() {
+        val nested = "[".repeat(100) + "]".repeat(100)
+        val json = """{"v":1,"id":"x","type":"future.event","ts":1,"payload":$nested}"""
+
+        assertEquals(
+            CodecException.Kind.MALFORMED,
+            assertThrows<CodecException> { MessageCodec.decode(json.toByteArray()) }.kind
+        )
+    }
+
+    @Test
+    fun `reject lone surrogate escape`() {
+        val json = """{"v":1,"id":"x","type":"clipboard.update","ts":1,"payload":{"body":"\ud83d"}}"""
+
+        assertEquals(
+            CodecException.Kind.MALFORMED,
+            assertThrows<CodecException> { MessageCodec.decode(json.toByteArray()) }.kind
+        )
+    }
+
+    @Test
+    fun `accept valid surrogate pair escape`() {
+        val json = """{"v":1,"id":"x","type":"clipboard.update","ts":1,"payload":{"body":"\ud83d\ude00"}}"""
+
+        val envelope = MessageCodec.decode(json.toByteArray())
+
+        assertEquals("😀", (envelope.payload as JsonObject)["body"]?.jsonPrimitiveText())
+    }
 }
 
 private fun kotlinx.serialization.json.JsonElement.jsonPrimitiveText(): String =
