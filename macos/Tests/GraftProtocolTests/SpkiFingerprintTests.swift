@@ -27,6 +27,44 @@ final class SpkiFingerprintTests: XCTestCase {
         XCTAssertFalse(value.contains("/"))
         XCTAssertEqual(value.count, 43)
     }
+
+    func testSharedIdentityVectors() throws {
+        let vectors = try IdentityVectors.load()
+        XCTAssertEqual(vectors.count, 2, "both languages must read the same vectors")
+
+        for vector in vectors {
+            XCTAssertEqual(
+                SpkiFingerprint.base64URL(spki: vector.spki),
+                vector.fingerprint,
+                "vector \(vector.name)"
+            )
+        }
+    }
+}
+
+enum IdentityVectors {
+    struct Vector {
+        let name: String
+        let spki: Data
+        let fingerprint: String
+    }
+
+    static func load() throws -> [Vector] {
+        let url = FixtureLoader.directory
+            .appendingPathComponent("identity/expected.json")
+        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
+        guard let root = object as? [String: Any], let rows = root["vectors"] as? [[String: Any]] else {
+            throw NSError(domain: "IdentityVectors", code: 1)
+        }
+        return try rows.map { row in
+            guard let name = row["name"] as? String,
+                  let spkiHex = row["spkiHex"] as? String,
+                  let fingerprint = row["sha256Base64Url"] as? String else {
+                throw NSError(domain: "IdentityVectors", code: 2)
+            }
+            return Vector(name: name, spki: Data(hexString: spkiHex), fingerprint: fingerprint)
+        }
+    }
 }
 
 extension Data {
