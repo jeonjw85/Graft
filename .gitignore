@@ -1,12 +1,74 @@
-.DS_Store
+# Local agent workspace and planning documents (never published)
 docs/superpowers/
-macos/.build/
-macos/*.xcodeproj/
-macos/*.xcworkspace/
-android/.gradle/
-android/**/build/
-android/local.properties
+.superpowers/
+.omo/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Editors and IDEs
 .idea/
 *.iml
+*.ipr
+*.iws
+.vscode/
+.fleet/
+*.swp
+*.swo
+*~
+
+# Swift Package Manager
+.build/
+.swiftpm/
+DerivedData/
+
+# Xcode
+xcuserdata/
 *.xcuserstate
-.superpowers/
+*.xcscmblueprint
+*.xccheckout
+*.xcodeproj/
+*.xcworkspace/
+*.dSYM/
+*.dSYM.zip
+
+# Gradle and Android
+.gradle/
+.kotlin/
+build/
+local.properties
+captures/
+.cxx/
+*.hprof
+*.apk
+*.aab
+*.jks
+*.keystore
+keystore.properties
+secrets.properties
+
+# Node.js tooling for protocol validation
+node_modules/
+npm-debug.log*
+
+# Test, coverage, and log output
+coverage/
+*.lcov
+*.log
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Patch leftovers
+*.orig
+*.rej
