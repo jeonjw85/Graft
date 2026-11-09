@@ -21,7 +21,10 @@ All of the following must pass before you open a pull request.
 ./protocol/tools/validate.sh
 swift test --package-path macos
 cd android && ./gradlew :core:test
+./protocol/tools/e2e-pairing.sh
 ```
+
+The end-to-end pairing test needs Xcode and JDK 21. It starts a headless Mac server, pairs a Kotlin peer over TLS, and checks that a replayed token is rejected.
 
 ## Commit messages
 

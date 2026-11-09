@@ -12,9 +12,9 @@
 
 - [x] Repository skeleton, license, public documentation
 - [x] Protocol v1 specification and JSON Schema
-- [x] Swift and Kotlin codecs with 15 shared fixtures
+- [x] Swift and Kotlin codecs with 16 shared fixtures
 - [x] Three CI workflows (protocol, macOS, Android)
-- [ ] TLS 1.3 transport and QR pairing
+- [x] TLS 1.3 transport, QR pairing, and an end-to-end pairing test
 - [ ] macOS menu bar app, Android Compose app, onboarding
 
 ## Candidates for v0.2 and later
