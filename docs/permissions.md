@@ -1,26 +1,26 @@
-# 권한 안내
+# Permissions
 
-Graft는 기능에 필요한 최소한의 권한만 요청합니다. 이 문서는 각 권한이 왜 필요한지, 거부하면 무엇이 동작하지 않는지 설명합니다.
+Graft requests only the permissions its features need. This document explains why each one is required and what breaks if it is denied.
 
-> 상태: 초안. 앱 구현과 함께 갱신됩니다.
+> Status: draft. It will be updated alongside the app implementation.
 
-| 플랫폼 | 권한 | 필요한 이유 | 거부 시 |
+| Platform | Permission | Why it is needed | If denied |
 |---|---|---|---|
-| macOS | 로컬 네트워크 | 기기 검색(Bonjour)과 연결 | 기기를 찾지 못함. 수동 IP 입력으로 우회 가능 |
-| Android | 알림 접근 | 폰 알림을 맥으로 전달 | 알림 기능만 비활성화됨 |
-| Android | 카메라 | QR 코드 스캔 | 6자리 코드로 페어링 |
-| Android | 알림 표시 (Android 13+) | 연결 상태와 수신 알림 표시 | 연결 상태가 앱 안에서만 보임 |
-| Android | 배터리 최적화 예외 (선택) | 백그라운드 연결 유지 | 화면이 꺼지면 연결이 끊길 수 있음 |
+| macOS | Local network | Device discovery (Bonjour) and connections | Devices are not discovered; manual IP entry still works |
+| Android | Notification access | Forward phone notifications to the Mac | Only the notification feature is disabled |
+| Android | Camera | Scan the pairing QR code | Pair with the six-digit code instead |
+| Android | Notifications (Android 13+) | Show connection state and incoming notifications | Connection state is only visible inside the app |
+| Android | Battery optimization exemption (optional) | Keep the connection alive in the background | The connection may drop when the screen turns off |
 
-## 요청하지 않는 권한
+## Permissions we do not request
 
-- **Full Disk Access** — 맥의 다른 앱 알림을 읽지 않으므로 필요하지 않습니다.
-- **손쉬운 사용(접근성)** — 원격 입력 기능이 없으므로 필요하지 않습니다.
-- **위치** — 주변 기기 검색에 위치 권한을 사용하지 않습니다.
+- **Full Disk Access** on macOS: Graft does not read other apps' notifications.
+- **Accessibility** on macOS: there is no remote input feature.
+- **Location** on Android: nearby device discovery does not rely on location permission.
 
-## 제조사별 주의 사항
+## Vendor-specific notes
 
-일부 제조사(Xiaomi, Samsung, OnePlus 등)는 백그라운드 서비스를 강하게 종료합니다. 연결이 자주 끊기면 다음을 확인하세요.
+Some vendors (Xiaomi, Samsung, OnePlus, and others) aggressively terminate background services. If the connection drops often:
 
-- 배터리 사용량 최적화에서 Graft를 "제한 없음"으로 설정
-- 최근 앱 목록에서 Graft를 잠금(고정)
+- Set Graft to "Unrestricted" under battery usage optimization.
+- Lock Graft in the recent apps list.

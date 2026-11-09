@@ -1,6 +1,6 @@
 import Foundation
 
-/// 임의의 JSON 값을 타입 안전하게 표현한다.
+/// A type-safe representation of an arbitrary JSON value.
 public enum JSONValue: Equatable, Sendable {
     case null
     case bool(Bool)

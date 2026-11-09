@@ -1,57 +1,57 @@
 # Graft
 
-맥과 안드로이드를 같은 Wi-Fi에서 잇는 오픈소스 도구입니다. 클라우드도, 계정도 없이 두 기기 사이에서 파일·클립보드·알림을 주고받습니다.
+An open-source tool that connects your Mac and your Android phone over the same Wi-Fi network. No cloud, no account, no relay: transfer files, share clipboard text, and mirror notifications directly between the two devices.
 
-> **상태:** v0.1 개발 중입니다. 아직 설치 가능한 릴리스는 없습니다.
+> **Status:** v0.1 is in development. There is no installable release yet.
 
-## 계획 중인 기능 (v0.1)
+## Planned features (v0.1)
 
-| 기능 | 방향 | 상태 |
+| Feature | Direction | Status |
 |---|---|---|
-| 파일 전송 (이어받기, 해시 검증) | 맥 ↔ 안드로이드 | 개발 예정 |
-| 클립보드 텍스트 공유 | 맥 → 안드로이드 (자동) | 개발 예정 |
-| 클립보드 텍스트 공유 | 안드로이드 → 맥 (공유 시트·퀵타일) | 개발 예정 |
-| 알림 표시 | 안드로이드 → 맥 | 개발 예정 |
-| QR 페어링 | 맥 ↔ 안드로이드 | 개발 예정 |
+| File transfer (resume, hash verification) | Mac <-> Android | Planned |
+| Clipboard text sharing | Mac -> Android (automatic) | Planned |
+| Clipboard text sharing | Android -> Mac (share sheet, Quick Settings tile) | Planned |
+| Notification display | Android -> Mac | Planned |
+| QR pairing | Mac <-> Android | Planned |
 
-맥 → 안드로이드 알림은 지원하지 않습니다. macOS에는 다른 앱의 알림을 읽는 공개 API가 없기 때문입니다. 자세한 배경은 [위협 모델](docs/threat-model.md)에 정리합니다.
+Mac -> Android notifications are not supported: macOS has no public API for reading other apps' notifications. See the [threat model](docs/threat-model.md) for the reasoning.
 
-## 요구 사항
+## Requirements
 
-- macOS 13 Ventura 이상
-- Android 10 (API 29) 이상
-- 두 기기가 같은 로컬 네트워크에 연결되어 있어야 합니다. 외부 네트워크 접속은 지원하지 않습니다.
+- macOS 13 Ventura or later
+- Android 10 (API 29) or later
+- Both devices on the same local network. Remote access is not supported.
 
-## 설치
+## Installation
 
-릴리스 준비 중입니다. 준비되면 GitHub Releases에서 DMG와 APK를 배포할 예정입니다.
+Releases are being prepared. Once ready, the DMG and APK builds will be published on GitHub Releases.
 
-## 권한과 개인정보
+## Permissions and privacy
 
-- **macOS:** 로컬 네트워크 접근만 요청합니다. Full Disk Access와 손쉬운 사용 권한은 필요하지 않습니다.
-- **Android:** 알림 접근, 카메라(QR 스캔), 알림 표시 권한을 사용합니다. 배터리 최적화 예외는 선택 사항입니다.
-- 클라우드 서버, 계정, 분석 도구를 사용하지 않습니다.
-- 클립보드와 알림 내용은 디스크에 저장하지 않습니다.
+- **macOS:** local network access only. Full Disk Access and Accessibility are not required.
+- **Android:** notification access, camera (QR scanning), and notification permission. The battery optimization exemption is optional.
+- No cloud servers, accounts, or analytics.
+- Clipboard and notification contents are never written to disk.
 
-자세한 내용은 [권한 안내](docs/permissions.md)를 참고하세요.
+See [Permissions](docs/permissions.md) for details.
 
-## 저장소 구조
+## Repository layout
 
 ```text
-macos/      macOS 앱 (Swift, SwiftUI)
-android/    Android 앱 (Kotlin, Jetpack Compose)
-protocol/   두 앱이 공유하는 와이어 프로토콜 스키마와 픽스처
-docs/       프로토콜 명세, 권한, 위협 모델, 로드맵
+macos/      macOS app (Swift, SwiftUI)
+android/    Android app (Kotlin, Jetpack Compose)
+protocol/   Wire protocol schema and fixtures shared by both apps
+docs/       Protocol specification, permissions, threat model, roadmap
 ```
 
-## 문서
+## Documentation
 
-- [프로토콜 명세](docs/protocol.md)
-- [로드맵](docs/roadmap.md)
-- [권한 안내](docs/permissions.md)
-- [위협 모델](docs/threat-model.md)
-- [기여 안내](CONTRIBUTING.md)
+- [Protocol specification](docs/protocol.md)
+- [Roadmap](docs/roadmap.md)
+- [Permissions](docs/permissions.md)
+- [Threat model](docs/threat-model.md)
+- [Contributing](CONTRIBUTING.md)
 
-## 라이선스
+## License
 
-MIT 라이선스입니다. [LICENSE](LICENSE)를 참고하세요.
+MIT. See [LICENSE](LICENSE).

@@ -5,7 +5,7 @@ import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import kotlinx.serialization.json.Json
 
-/** 프로토콜 v1 제어 프레임의 인코딩·디코딩. */
+/** Encoding and decoding for protocol v1 control frames. */
 object MessageCodec {
     const val CURRENT_VERSION = 1
     const val MAX_CONTROL_FRAME_BYTES = 512 * 1024
@@ -85,7 +85,7 @@ object MessageCodec {
         return false
     }
 
-    /** JSON 문자열 안의 짝이 맞지 않는 `\\uD800`~`\\uDFFF` 이스케이프를 찾는다. */
+    /** Finds unpaired `\\uD800`–`\\uDFFF` escapes inside JSON strings. */
     private fun hasUnpairedSurrogateEscape(text: String): Boolean {
         var index = 0
         var inString = false

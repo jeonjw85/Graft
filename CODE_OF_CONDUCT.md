@@ -1,17 +1,17 @@
-# 행동 강령
+# Code of Conduct
 
-이 프로젝트는 [Contributor Covenant 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/)을 따릅니다.
+This project follows the [Contributor Covenant, version 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
 
-## 요약
+## Summary
 
-- 서로 존중하고, 기술적 논쟁과 인신공격을 구분합니다.
-- 경험 수준, 언어, 국적, 성별, 장애 여부와 무관하게 참여를 환영합니다.
-- 괴롭힘, 차별, 개인정보 공개, 반복적인 무례는 허용되지 않습니다.
+- Be respectful, and distinguish technical disagreement from personal attacks.
+- Welcome participation regardless of experience level, language, nationality, gender, or disability.
+- Harassment, discrimination, publishing private information, and repeated rudeness are not acceptable.
 
-## 신고
+## Reporting
 
-문제가 되는 행동을 목격하거나 경험했다면 `jjw@jjw.kr`로 알려 주세요. 신고 내용은 비공개로 처리하며, 72시간 내 회신을 목표로 합니다.
+If you witness or experience unacceptable behavior, email `jjw@jjw.kr`. Reports are handled confidentially, and we aim to respond within 72 hours.
 
-## 적용 범위
+## Scope
 
-이슈, 풀 리퀘스트, 리뷰, 토론을 포함해 이 저장소에서 이루어지는 모든 상호작용에 적용됩니다.
+This code applies to every interaction in this repository, including issues, pull requests, reviews, and discussions.

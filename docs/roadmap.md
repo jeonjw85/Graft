@@ -1,29 +1,29 @@
-# 로드맵
+# Roadmap
 
-| 단계 | 내용 | 완료 조건 | 상태 |
+| Milestone | Scope | Done when | Status |
 |---|---|---|---|
-| M0 기반 | 저장소, 프로토콜 v1, Swift·Kotlin 코덱, CI, 전송·페어링, 앱 셸 | 두 앱이 실제 기기에서 페어링되고 연결이 유지된다 | 진행 중 |
-| M1 파일 | 양방향 파일 전송, 이어받기, 해시 검증 | 1GB 파일이 끊김 후 이어받기로 완료된다 | 예정 |
-| M2 클립보드 | 맥→안드로이드 자동, 안드로이드→맥 트리거 | 한글·이모지가 왕복에서 보존된다 | 예정 |
-| M3 알림 | 안드로이드→맥 알림, 앱별 허용 목록 | 1초 이내 표시, 민감 앱 기본 제외 | 예정 |
-| M4 릴리스 | DMG·APK, 설치 문서, v0.1.0 | 서명된 산출물과 설치 안내 | 예정 |
+| M0 Foundation | Repository, protocol v1, Swift and Kotlin codecs, CI, transport and pairing, app shell | Both apps pair on real devices and keep the connection alive | In progress |
+| M1 Files | Bidirectional file transfer, resume, hash verification | A 1 GB transfer interrupted midway resumes and completes | Planned |
+| M2 Clipboard | Mac -> Android automatic, Android -> Mac on demand | Korean text and emoji survive a round trip | Planned |
+| M3 Notifications | Android -> Mac notifications, per-app allow list | Shown within one second, sensitive apps excluded by default | Planned |
+| M4 Release | DMG and APK, installation docs, v0.1.0 | Signed artifacts and installation instructions | Planned |
 
-## M0 세부
+## M0 breakdown
 
-- [x] 저장소 뼈대·라이선스·공개 문서
-- [x] 프로토콜 v1 스펙과 JSON Schema
-- [x] Swift·Kotlin 코덱 + 공용 픽스처 15개
-- [x] CI 3종 (protocol, macOS, Android)
-- [ ] TLS 1.3 전송과 QR 페어링
-- [ ] macOS 메뉴바 앱, Android Compose 앱, 온보딩
+- [x] Repository skeleton, license, public documentation
+- [x] Protocol v1 specification and JSON Schema
+- [x] Swift and Kotlin codecs with 15 shared fixtures
+- [x] Three CI workflows (protocol, macOS, Android)
+- [ ] TLS 1.3 transport and QR pairing
+- [ ] macOS menu bar app, Android Compose app, onboarding
 
-## v0.2 이후 후보
+## Candidates for v0.2 and later
 
-1. 알림 답장과 폰에서 앱 열기
-2. 클립보드 이미지 공유
-3. 맥 화면 캡처 전송
-4. 폰 배터리 표시, 폰 울리기
-5. 다중 기기 지원
-6. 외부 네트워크 접속
+1. Notification replies and opening the app from the phone
+2. Clipboard image sharing
+3. Mac screen capture transfer
+4. Phone battery level and ring-my-phone
+5. Multi-device support
+6. Remote access outside the local network
 
-우선순위는 이슈에서 논의합니다.
+Priority is discussed in the issue tracker.

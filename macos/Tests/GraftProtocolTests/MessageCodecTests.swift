@@ -16,7 +16,7 @@ final class MessageCodecTests: XCTestCase {
 
     func testRoundTripAllFixtures() throws {
         let names = try FixtureLoader.names()
-        XCTAssertEqual(names.count, 15, "모든 픽스처를 라운드트립해야 한다")
+        XCTAssertEqual(names.count, 15, "every fixture must round-trip")
 
         for name in names {
             let decoded = try MessageCodec.decode(try FixtureLoader.data(name))

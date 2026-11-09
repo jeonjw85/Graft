@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
-/** 프로토콜 v1 제어 프레임의 엔벨로프. */
+/** Envelope of a protocol v1 control frame. */
 @Serializable
 data class Envelope(
     @Required val v: Int = MessageCodec.CURRENT_VERSION,

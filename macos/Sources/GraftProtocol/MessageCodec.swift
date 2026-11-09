@@ -6,7 +6,7 @@ public enum CodecError: Error, Equatable, Sendable {
     case malformed(String)
 }
 
-/// 프로토콜 v1 제어 프레임의 인코딩·디코딩.
+/// Encoding and decoding for protocol v1 control frames.
 public enum MessageCodec {
     public static let currentVersion = 1
     public static let maxControlFrameBytes = 512 * 1024

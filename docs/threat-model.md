@@ -1,38 +1,38 @@
-# 위협 모델
+# Threat model
 
-> 상태: 초안. 전송·페어링 구현과 함께 완성됩니다.
+> Status: draft. It will be finalized with the transport and pairing implementation.
 
-## 자산
+## Assets
 
-- 사용자의 클립보드 내용 (비밀번호, 인증 코드, 개인 메시지)
-- 알림 내용
-- 전송 중인 파일
+- Clipboard contents (passwords, verification codes, private messages)
+- Notification contents
+- Files in transit
 
-## 공격자
+## Adversaries
 
-1. **같은 Wi-Fi의 수동적 공격자** — 트래픽을 엿보려는 기기
-2. **같은 Wi-Fi의 능동적 공격자** — Graft로 위장하거나 중간자 공격을 시도하는 기기
-3. **무단 페어링 시도자** — 사용자 모르게 연결을 만들려는 기기
+1. **Passive attacker on the same Wi-Fi** — a device trying to eavesdrop on traffic
+2. **Active attacker on the same Wi-Fi** — a device impersonating Graft or attempting a man-in-the-middle attack
+3. **Unauthorized pairing attempt** — a device trying to establish a connection without the user's knowledge
 
-## 대응
+## Mitigations
 
-| 위협 | 대응 |
+| Threat | Mitigation |
 |---|---|
-| 도청 | TLS 1.3. 평문 전송 없음 |
-| 위장 서버 | QR에 포함된 인증서 지문과 핸드셰이크 결과를 비교 |
-| 중간자 | 상호 TLS + 양쪽 인증서 지문 피닝 |
-| 무단 페어링 | 1회용 토큰(120초), 분당 5회 제한, 맥 화면 알림 |
-| 재연결 시 위장 | 매 연결마다 피어 지문 검증, 불일치 시 자동 재시도 금지 |
-| 클립보드 유출 | 디스크 저장 안 함, 로그에 본문 기록 금지, 알림 미리보기 기본 숨김 |
-| 악성 파일 | 지정 폴더에만 저장, 실행하지 않음, SHA-256 검증 |
+| Eavesdropping | TLS 1.3. Nothing is sent in plaintext |
+| Server impersonation | Compare the certificate fingerprint in the QR code with the handshake result |
+| Man-in-the-middle | Mutual TLS plus certificate fingerprint pinning on both sides |
+| Unauthorized pairing | Single-use token (120 s), five attempts per minute, on-screen prompt on the Mac |
+| Impersonation on reconnect | Verify the peer fingerprint on every connection; no automatic retry after a mismatch |
+| Clipboard leakage | Never written to disk, never logged, notification previews hidden by default |
+| Malicious files | Saved only to the designated folder, never executed, SHA-256 verified |
 
-## 명시적 범위 밖
+## Explicitly out of scope
 
-- 이미 침해된 macOS 또는 Android
-- 물리적 접근 (기기 탈취, 화면 녹화)
-- 루팅·탈옥된 기기
-- 사용자가 직접 페어링한 악성 기기
+- An already compromised macOS or Android device
+- Physical access (stolen device, screen recording)
+- Rooted or jailbroken devices
+- A malicious device that the user deliberately paired
 
-## 맥 → 안드로이드 알림을 지원하지 않는 이유
+## Why Mac -> Android notifications are not supported
 
-macOS는 다른 앱의 알림을 관찰하는 공개 API를 제공하지 않습니다. 유일한 경로는 Notification Center 데이터베이스를 읽는 비공식 방법이며, Full Disk Access 권한과 macOS 버전별 스키마 대응이 필요합니다. 광범위한 파일 접근 권한을 요구하는 대신 이 기능을 지원하지 않기로 했습니다.
+macOS does not expose a public API for observing other apps' notifications. The only route is reading the Notification Center database through an unofficial mechanism, which requires Full Disk Access and version-specific schema handling. Rather than request broad file access, Graft leaves this feature out.

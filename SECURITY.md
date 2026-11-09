@@ -1,25 +1,26 @@
-# 보안 정책
+# Security Policy
 
-## 취약점 신고
+## Reporting a vulnerability
 
-취약점은 공개 이슈로 올리지 말고 `jjw@jjw.kr`로 보내 주세요. 72시간 내 회신을 목표로 합니다.
+Please do not open a public issue for a vulnerability. Email `jjw@jjw.kr` instead. We aim to respond within 72 hours.
 
-신고에 포함하면 좋은 정보:
-- 영향받는 버전과 플랫폼(macOS/Android)
-- 재현 절차
-- 예상되는 영향 범위
-- 가능하다면 최소 재현 코드
+Useful details to include:
 
-## 지원 버전
+- Affected version and platform (macOS/Android)
+- Reproduction steps
+- Expected impact
+- A minimal proof of concept, if you have one
 
-릴리스 후에는 최신 마이너 버전만 보안 수정을 받습니다. v0.1.x가 첫 지원 대상입니다.
+## Supported versions
 
-## 설계상의 보안 경계
+After release, only the latest minor version receives security fixes. v0.1.x is the first supported line.
 
-- 두 기기는 같은 로컬 네트워크에서 TLS 1.3으로 직접 연결합니다. 중계 서버가 없습니다.
-- 페어링은 QR 코드의 인증서 지문과 1회용 토큰으로 검증합니다.
-- 시스템 신뢰 저장소를 수정하지 않으며, 사용자에게 인증서 신뢰를 요구하지 않습니다.
-- 클립보드와 알림 내용은 디스크에 저장하지 않고, 로그에 남기지 않습니다.
-- 범위 밖: 이미 침해된 운영체제, 물리적 접근, 루팅된 기기.
+## Security boundaries by design
 
-위협 모델과 대응은 [docs/threat-model.md](docs/threat-model.md)에 정리되어 있습니다.
+- Two devices connect directly over TLS 1.3 on the local network. There is no relay server.
+- Pairing is verified with the certificate fingerprint embedded in the QR code plus a single-use token.
+- Graft does not modify the system trust store and never asks the user to trust a certificate.
+- Clipboard and notification contents are never written to disk or logged.
+- Out of scope: an already compromised operating system, physical access, and rooted devices.
+
+The threat model and mitigations are documented in [docs/threat-model.md](docs/threat-model.md).

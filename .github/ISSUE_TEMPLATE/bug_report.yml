@@ -1,33 +1,33 @@
-name: 버그 신고
-description: 예상과 다르게 동작할 때 알려 주세요.
+name: Bug report
+description: Tell us when Graft does something unexpected.
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        보안 취약점은 공개 이슈 대신 [SECURITY.md](../blob/main/SECURITY.md)의 절차를 따라 주세요.
-        로그를 붙일 때 기기 이름, IP 주소, 클립보드/알림 내용은 지워 주세요.
+        For security vulnerabilities, do not open a public issue. Follow the process in [SECURITY.md](../blob/main/SECURITY.md) instead.
+        Before pasting logs, remove device names, IP addresses, and clipboard or notification contents.
   - type: dropdown
     id: platform
     attributes:
-      label: 플랫폼
+      label: Platform
       options:
         - macOS
         - Android
-        - 둘 다
+        - Both
     validations:
       required: true
   - type: input
     id: version
     attributes:
-      label: 앱과 OS 버전
-      placeholder: "예: Graft 0.1.0, macOS 15.2 / Android 14"
+      label: App and OS versions
+      placeholder: "e.g. Graft 0.1.0, macOS 15.2 / Android 14"
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: 재현 절차
+      label: Steps to reproduce
       placeholder: |
         1. ...
         2. ...
@@ -37,17 +37,17 @@ body:
   - type: textarea
     id: expected
     attributes:
-      label: 기대한 동작
+      label: Expected behavior
     validations:
       required: true
   - type: textarea
     id: actual
     attributes:
-      label: 실제 동작
+      label: Actual behavior
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
-      label: 로그 (선택)
+      label: Logs (optional)
       render: shell

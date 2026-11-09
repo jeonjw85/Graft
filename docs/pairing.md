@@ -1,32 +1,32 @@
-# 페어링 절차
+# Pairing
 
-> 상태: 초안. 전송·페어링 구현과 함께 완성됩니다.
+> Status: draft. It will be finalized with the transport and pairing implementation.
 
-## 개요
+## Overview
 
-1. 맥에서 "기기 추가"를 눌러 QR 코드를 표시합니다.
-2. 안드로이드 앱에서 QR 코드를 스캔합니다.
-3. 양쪽 기기가 상대 인증서 지문을 저장하고 연결을 완료합니다.
+1. On the Mac, select "Add device" to display a QR code.
+2. Scan the QR code with the Android app.
+3. Both devices store the other's certificate fingerprint and finish connecting.
 
-## QR 코드에 담기는 정보
+## QR payload
 
 ```text
-graft://pair?v=1&h=<ip>&p=47800&fp=<SPKI-SHA256-base64url>&t=<token>&n=<기기 이름>
+graft://pair?v=1&h=<ip>&p=47800&fp=<SPKI-SHA256-base64url>&t=<token>&n=<device-name>
 ```
 
-| 필드 | 의미 |
+| Field | Meaning |
 |---|---|
-| `h`, `p` | 맥의 로컬 IP와 포트 |
-| `fp` | 맥 TLS 인증서의 SPKI SHA-256 (base64url) |
-| `t` | 1회용 페어링 토큰 (120초 유효) |
-| `n` | 맥의 표시 이름 |
+| `h`, `p` | Local IP address and port of the Mac |
+| `fp` | SPKI SHA-256 of the Mac's TLS certificate (base64url) |
+| `t` | Single-use pairing token, valid for 120 seconds |
+| `n` | Display name of the Mac |
 
-## 보안 속성
+## Security properties
 
-- 폰은 TLS 핸드셰이크에서 받은 서버 인증서의 지문이 `fp`와 일치하는지 확인합니다. 불일치하면 즉시 중단합니다.
-- 토큰은 1회용이며 120초 후 만료됩니다.
-- 페어링이 끝나면 양쪽은 상대 인증서 지문을 저장하고, 이후 모든 연결에서 이를 검증합니다.
+- The phone compares the server certificate fingerprint from the TLS handshake with `fp`. On a mismatch it aborts immediately.
+- The token is single-use and expires after 120 seconds.
+- After pairing, both sides store the peer certificate fingerprint and verify it on every subsequent connection.
 
-## 폴백
+## Fallback
 
-카메라를 사용할 수 없거나 mDNS가 차단된 네트워크에서는 맥이 표시하는 6자리 코드와 IP 주소를 폰에 직접 입력합니다.
+If the camera is unavailable or mDNS is blocked on the network, enter the six-digit code and IP address shown by the Mac into the phone manually.

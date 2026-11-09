@@ -1,43 +1,43 @@
-# ADR 0001: 자체 프로토콜과 네이티브 앱
+# ADR 0001: Custom protocol and native apps
 
-- 상태: 승인됨
-- 날짜: 2026-11-10
+- Status: Accepted
+- Date: 2026-11-10
 
-## 맥락
+## Context
 
-맥과 안드로이드를 같은 로컬 네트워크에서 연결해 파일·클립보드·알림을 주고받는 오픈소스 도구를 만든다. 두 플랫폼 모두 시스템 API 접근이 중요하다.
+Build an open-source tool that connects a Mac and an Android phone on the same local network to exchange files, clipboard text, and notifications. Deep access to platform APIs matters on both sides.
 
-- macOS: `NSPasteboard`, 메뉴바, `NWListener`, Keychain
-- Android: `NotificationListenerService`, 포그라운드 서비스, Keystore, 클립보드 제약
+- macOS: `NSPasteboard`, menu bar, `NWListener`, Keychain
+- Android: `NotificationListenerService`, foreground services, Keystore, clipboard restrictions
 
-## 결정
+## Decision
 
-1. 자체 JSON 프로토콜을 정의하고 문서로 공개한다.
-2. 전송은 Bonjour/mDNS 검색 + TLS 1.3 상호 인증 WebSocket 하나로 구성한다.
-3. 앱은 플랫폼 네이티브로 작성한다: Swift/SwiftUI, Kotlin/Jetpack Compose.
+1. Define our own JSON protocol and publish it as documentation.
+2. Use a single TLS 1.3 mutually authenticated WebSocket, discovered through Bonjour/mDNS.
+3. Write native apps: Swift/SwiftUI and Kotlin/Jetpack Compose.
 
-## 검토한 대안
+## Alternatives considered
 
-### A. KDE Connect 프로토콜 재사용
+### A. Reuse the KDE Connect protocol
 
-- 장점: 기존 안드로이드 앱과 호환되어 안드로이드 앱을 만들지 않아도 된다.
-- 단점: 프로토콜이 복잡하고 Swift 구현 사례가 사실상 없다. UX와 기능을 통제하기 어렵다.
-- 결론: 채택하지 않음.
+- Pros: compatible with the existing Android app, so no Android client is needed.
+- Cons: a complex protocol with virtually no Swift implementations. Hard to control UX and feature scope.
+- Verdict: rejected.
 
-### B. LocalSend 같은 기존 프로젝트 포크
+### B. Fork an existing project such as LocalSend
 
-- 장점: 가장 빠르게 동작하는 파일 전송을 얻는다.
-- 단점: 파일 전송 중심 설계라 클립보드·알림 확장이 어색하고, 업스트림과 갈라지면 유지보수 부담이 커진다.
-- 결론: 채택하지 않음.
+- Pros: working file transfer on day one.
+- Cons: designed around file transfer, so clipboard and notifications fit poorly, and divergence from upstream becomes a maintenance burden.
+- Verdict: rejected.
 
-### C. Flutter 또는 Kotlin Multiplatform 단일 코드베이스
+### C. Single codebase with Flutter or Kotlin Multiplatform
 
-- 장점: UI 코드를 한 번만 작성한다.
-- 단점: 메뉴바·페이스트보드·알림 접근·Keystore 같은 플랫폼 API 의존도가 높아 플러그인 경계에서 복잡해진다.
-- 결론: 채택하지 않음. 두 앱이 공유하는 것은 와이어 프로토콜과 픽스처로 제한한다.
+- Pros: write UI code once.
+- Cons: heavy reliance on platform APIs (menu bar, pasteboard, notification access, Keystore) turns the plugin boundary into the hard part.
+- Verdict: rejected. The two apps share only the wire protocol and its fixtures.
 
-## 결과
+## Consequences
 
-- 프로토콜 스펙과 골든 픽스처를 단일 진실 공급원으로 두고, Swift와 Kotlin 구현이 같은 테스트를 통과해야 한다.
-- 서드파티가 macOS/Linux/CLI 클라이언트를 만들 수 있다.
-- 비용: 프로토콜을 직접 설계·유지해야 하고, 두 언어의 코드를 각각 관리해야 한다.
+- The protocol specification and golden fixtures are the single source of truth; the Swift and Kotlin implementations must pass the same tests.
+- Third parties can build macOS, Linux, or CLI clients.
+- Cost: we design and maintain the protocol ourselves, and we maintain two language implementations.

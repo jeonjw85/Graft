@@ -1,6 +1,6 @@
 import Foundation
 
-/// 프로토콜 v1 제어 프레임의 엔벨로프.
+/// Envelope of a protocol v1 control frame.
 public struct Envelope: Equatable, Sendable {
     public var v: Int
     public var id: String
