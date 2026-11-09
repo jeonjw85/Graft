@@ -85,7 +85,7 @@ object MessageCodec {
         return false
     }
 
-    /** Finds unpaired `\\uD800`–`\\uDFFF` escapes inside JSON strings. */
+    /** Finds unpaired `\\uD800` to `\\uDFFF` escapes inside JSON strings. */
     private fun hasUnpairedSurrogateEscape(text: String): Boolean {
         var index = 0
         var inString = false

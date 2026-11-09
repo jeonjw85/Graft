@@ -47,7 +47,7 @@ Control messages are carried in a single UTF-8 JSON text frame.
 
 If a control frame exceeds 512 KiB, the receiver closes the connection and records `oversized`. If clipboard text exceeds 256 KiB, the sender does not send that update.
 
-A frame that is not valid UTF-8, contains an unpaired surrogate escape (`\uD800`–`\uDFFF`), or nests JSON deeper than 64 levels is answered with `error{code:"bad_payload"}` and the connection is closed. Both implementations must produce the same result at the same boundary.
+A frame that is not valid UTF-8, contains an unpaired surrogate escape (`\uD800`-`\uDFFF`), or nests JSON deeper than 64 levels is answered with `error{code:"bad_payload"}` and the connection is closed. Both implementations must produce the same result at the same boundary.
 
 ### 1.2 Version negotiation
 
@@ -82,22 +82,22 @@ If `v` is not `1`, the receiver sends `error{code:"proto_unsupported"}` and clos
 
 | Field | Type | Description |
 |---|---|---|
-| `deviceId` | string (1–64) | Stable identifier for the device |
-| `name` | string (1–64) | User-visible device name |
+| `deviceId` | string (1-64) | Stable identifier for the device |
+| `name` | string (1-64) | User-visible device name |
 | `platform` | `"macos"` \| `"android"` | Platform |
-| `appVersion` | string (1–32) | App version (`hello` only) |
+| `appVersion` | string (1-32) | App version (`hello` only) |
 | `proto` | integer >= 1 | Highest protocol version the sender supports |
 | `caps` | string array (<= 32) | Supported capabilities |
 
 `caps` values: `file.transfer`, `clipboard.text`, `notification.post`.
 
-**`pair.request`** — the only message allowed on a connection that is not yet trusted. Any other message is answered with `error{code:"unpaired"}` and the connection is closed.
+**`pair.request`** is the only message allowed on a connection that is not yet trusted. Any other message is answered with `error{code:"unpaired"}` and the connection is closed.
 
 | Field | Type | Description |
 |---|---|---|
-| `token` | string (base64url, 16–128) | Single-use token from the QR code |
-| `deviceId` | string (1–64) | Android device identifier |
-| `name` | string (1–64) | Device name |
+| `token` | string (base64url, 16-128) | Single-use token from the QR code |
+| `deviceId` | string (1-64) | Android device identifier |
+| `name` | string (1-64) | Device name |
 | `platform` | `"android"` | Platform |
 
 **`clipboard.update`**
@@ -120,9 +120,9 @@ If `v` is not `1`, the receiver sends `error{code:"proto_unsupported"}` and clos
 | `key` | string | Notification key used for de-duplication |
 | `priority` | `"low"` \| `"normal"` \| `"high"` | Priority |
 
-**File transfer** — `tid` is a transfer identifier in the uint32 range (0–4294967295).
+**File transfer.** `tid` is a transfer identifier in the uint32 range (0-4294967295).
 
-- `file.offer`: `name` (1–255), `size` (>= 0), `mime`
+- `file.offer`: `name` (1-255), `size` (>= 0), `mime`
 - `file.accept`: requests the transfer starting at `offset` (>= 0)
 - `file.reject`: `reason` is a free-form string (`declined`, `disk_full`, `too_large`, ...)
 - `file.complete`: `sha256` is 64 lowercase hexadecimal characters
@@ -163,7 +163,7 @@ If the magic or version does not match, the frame is dropped and the receiver se
 2. While unpaired, only `pair.request` is allowed.
 3. After pairing, both sides send `hello` and answer with `hello.ok`. The intersection of both `caps` sets is what this session may use.
 4. Send `ping` every 20 seconds and expect `pong`. With no response for 60 seconds, treat the connection as dead.
-5. Reconnect with a 1 → 2 → 4 → 8 → 16 → 32 → 60 second backoff plus ±20% jitter.
+5. Reconnect with a backoff of 1, 2, 4, 8, 16, 32, and 60 seconds, with 20% jitter.
 
 ## 6. Timeouts
 

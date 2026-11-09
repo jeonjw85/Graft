@@ -10,9 +10,9 @@
 
 ## Adversaries
 
-1. **Passive attacker on the same Wi-Fi** — a device trying to eavesdrop on traffic
-2. **Active attacker on the same Wi-Fi** — a device impersonating Graft or attempting a man-in-the-middle attack
-3. **Unauthorized pairing attempt** — a device trying to establish a connection without the user's knowledge
+1. **Passive attacker on the same Wi-Fi**: a device trying to eavesdrop on traffic
+2. **Active attacker on the same Wi-Fi**: a device impersonating Graft or attempting a man-in-the-middle attack
+3. **Unauthorized pairing attempt**: a device trying to establish a connection without the user's knowledge
 
 ## Mitigations
 

@@ -1,6 +1,6 @@
 # Graft
 
-An open-source tool that connects your Mac and your Android phone over the same Wi-Fi network. No cloud, no account, no relay: transfer files, share clipboard text, and mirror notifications directly between the two devices.
+An open-source tool that connects a Mac and an Android phone over the same Wi-Fi network. Transfer files, share clipboard text, and mirror notifications between the two devices. Nothing leaves the local network.
 
 > **Status:** v0.1 is in development. There is no installable release yet.
 
@@ -14,7 +14,7 @@ An open-source tool that connects your Mac and your Android phone over the same 
 | Notification display | Android -> Mac | Planned |
 | QR pairing | Mac <-> Android | Planned |
 
-Mac -> Android notifications are not supported: macOS has no public API for reading other apps' notifications. See the [threat model](docs/threat-model.md) for the reasoning.
+Graft does not send Mac notifications to Android, because macOS has no public API for reading other apps' notifications. See the [threat model](docs/threat-model.md) for details.
 
 ## Requirements
 
@@ -24,7 +24,7 @@ Mac -> Android notifications are not supported: macOS has no public API for read
 
 ## Installation
 
-Releases are being prepared. Once ready, the DMG and APK builds will be published on GitHub Releases.
+There is no release yet. DMG and APK builds will be published on GitHub Releases.
 
 ## Permissions and privacy
 

@@ -26,4 +26,4 @@
 5. Multi-device support
 6. Remote access outside the local network
 
-Priority is discussed in the issue tracker.
+Priority is decided in the issue tracker.
