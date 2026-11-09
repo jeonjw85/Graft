@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "id": "a1b2c3d4-0000-4000-8000-000000000006",
+  "re": "a1b2c3d4-0000-4000-8000-000000000005",
+  "type": "pair.ok",
+  "ts": 1762752003100,
+  "payload": {
+    "deviceId": "mac-7f3a9c",
+    "name": "Jeongwan의 MacBook Pro",
+    "platform": "macos"
+  }
+}

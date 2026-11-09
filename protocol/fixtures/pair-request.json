@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "id": "a1b2c3d4-0000-4000-8000-000000000005",
+  "type": "pair.request",
+  "ts": 1762752003000,
+  "payload": {
+    "token": "QmFzZTY0dXJsVG9rZW5FeGFtcGxlMTIzNDU2",
+    "deviceId": "android-2b9e41",
+    "name": "Galaxy S24",
+    "platform": "android"
+  }
+}

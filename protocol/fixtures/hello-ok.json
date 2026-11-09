@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "id": "a1b2c3d4-0000-4000-8000-000000000002",
+  "re": "a1b2c3d4-0000-4000-8000-000000000001",
+  "type": "hello.ok",
+  "ts": 1762752000100,
+  "payload": {
+    "deviceId": "android-2b9e41",
+    "name": "Galaxy S24",
+    "proto": 1,
+    "caps": ["file.transfer", "clipboard.text", "notification.post"]
+  }
+}

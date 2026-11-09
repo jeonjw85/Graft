@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "a1b2c3d4-0000-4000-8000-000000000015",
+  "type": "hello",
+  "ts": 1762752009000,
+  "futureField": { "nested": [1, 2, 3] },
+  "payload": {
+    "deviceId": "mac-7f3a9c",
+    "name": "Jeongwan의 MacBook Pro",
+    "platform": "macos",
+    "appVersion": "0.1.0",
+    "proto": 1,
+    "caps": ["file.transfer", "clipboard.text", "notification.post"]
+  }
+}

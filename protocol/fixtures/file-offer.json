@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "id": "a1b2c3d4-0000-4000-8000-000000000009",
+  "type": "file.offer",
+  "ts": 1762752006000,
+  "payload": {
+    "tid": 7,
+    "name": "보고서.pdf",
+    "size": 1073741824,
+    "mime": "application/pdf"
+  }
+}

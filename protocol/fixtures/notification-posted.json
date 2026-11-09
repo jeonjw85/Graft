@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "a1b2c3d4-0000-4000-8000-000000000008",
+  "type": "notification.posted",
+  "ts": 1762752005000,
+  "payload": {
+    "pkg": "com.example.messenger",
+    "app": "메신저",
+    "title": "새 메시지",
+    "text": "내일 회의는 오후 세 시로 변경되었습니다. 참석 가능하신가요?",
+    "ts": 1762752004800,
+    "key": "0|com.example.messenger|42|null|10123",
+    "priority": "normal"
+  }
+}

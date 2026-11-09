@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "id": "a1b2c3d4-0000-4000-8000-000000000014",
+  "re": "a1b2c3d4-0000-4000-8000-000000000007",
+  "type": "error",
+  "ts": 1762752008000,
+  "payload": {
+    "code": "bad_payload",
+    "message": "payload must be a JSON object"
+  }
+}
