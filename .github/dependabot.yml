@@ -14,8 +14,12 @@ updates:
       interval: monthly
     commit-message:
       prefix: chore
-    ignore:
-      - dependency-name: "org.jetbrains.kotlin.*"
+    groups:
+      kotlin:
+        patterns:
+          - "org.jetbrains.kotlin*"
+          - "org.jetbrains.kotlinx:kotlinx-serialization-*"
+    open-pull-requests-limit: 3
 
   - package-ecosystem: swift
     directory: /macos
