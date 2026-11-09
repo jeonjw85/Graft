@@ -1,0 +1,365 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jeonjw85/graft/protocol/schema/messages.schema.json",
+  "title": "Graft control message",
+  "description": "Graft protocol v1 control frame envelope.",
+  "oneOf": [
+    { "$ref": "#/$defs/hello" },
+    { "$ref": "#/$defs/helloOk" },
+    { "$ref": "#/$defs/ping" },
+    { "$ref": "#/$defs/pong" },
+    { "$ref": "#/$defs/pairRequest" },
+    { "$ref": "#/$defs/pairOk" },
+    { "$ref": "#/$defs/clipboardUpdate" },
+    { "$ref": "#/$defs/notificationPosted" },
+    { "$ref": "#/$defs/fileOffer" },
+    { "$ref": "#/$defs/fileAccept" },
+    { "$ref": "#/$defs/fileReject" },
+    { "$ref": "#/$defs/fileComplete" },
+    { "$ref": "#/$defs/fileCancel" },
+    { "$ref": "#/$defs/error" }
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["v", "id", "type", "ts", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "id": { "type": "string", "minLength": 1 },
+        "re": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "ts": { "type": "integer" },
+        "payload": { "type": "object" }
+      }
+    },
+    "deviceId": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "deviceName": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "platform": { "enum": ["macos", "android"] },
+    "caps": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "enum": ["file.transfer", "clipboard.text", "notification.post"] }
+    },
+    "tid": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+
+    "hello": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "hello" },
+            "payload": { "$ref": "#/$defs/helloPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "helloPayload": {
+      "type": "object",
+      "required": ["deviceId", "name", "platform", "appVersion", "proto", "caps"],
+      "properties": {
+        "deviceId": { "$ref": "#/$defs/deviceId" },
+        "name": { "$ref": "#/$defs/deviceName" },
+        "platform": { "$ref": "#/$defs/platform" },
+        "appVersion": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "proto": { "type": "integer", "minimum": 1 },
+        "caps": { "$ref": "#/$defs/caps" }
+      }
+    },
+
+    "helloOk": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "hello.ok" },
+            "payload": { "$ref": "#/$defs/helloOkPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "helloOkPayload": {
+      "type": "object",
+      "required": ["deviceId", "name", "proto", "caps"],
+      "properties": {
+        "deviceId": { "$ref": "#/$defs/deviceId" },
+        "name": { "$ref": "#/$defs/deviceName" },
+        "proto": { "type": "integer", "minimum": 1 },
+        "caps": { "$ref": "#/$defs/caps" }
+      }
+    },
+
+    "ping": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "ping" },
+            "payload": { "type": "object" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+
+    "pong": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "pong" },
+            "payload": { "type": "object" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+
+    "pairRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "pair.request" },
+            "payload": { "$ref": "#/$defs/pairRequestPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "pairRequestPayload": {
+      "type": "object",
+      "required": ["token", "deviceId", "name", "platform"],
+      "properties": {
+        "token": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,128}$" },
+        "deviceId": { "$ref": "#/$defs/deviceId" },
+        "name": { "$ref": "#/$defs/deviceName" },
+        "platform": { "const": "android" }
+      }
+    },
+
+    "pairOk": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "pair.ok" },
+            "payload": { "$ref": "#/$defs/pairOkPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "pairOkPayload": {
+      "type": "object",
+      "required": ["deviceId", "name", "platform"],
+      "properties": {
+        "deviceId": { "$ref": "#/$defs/deviceId" },
+        "name": { "$ref": "#/$defs/deviceName" },
+        "platform": { "const": "macos" }
+      }
+    },
+
+    "clipboardUpdate": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "clipboard.update" },
+            "payload": { "$ref": "#/$defs/clipboardUpdatePayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "clipboardUpdatePayload": {
+      "type": "object",
+      "required": ["kind", "body", "ts"],
+      "properties": {
+        "kind": { "const": "text" },
+        "body": { "type": "string", "minLength": 1, "maxLength": 262144 },
+        "ts": { "type": "integer" }
+      }
+    },
+
+    "notificationPosted": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "notification.posted" },
+            "payload": { "$ref": "#/$defs/notificationPostedPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "notificationPostedPayload": {
+      "type": "object",
+      "required": ["pkg", "app", "title", "text", "ts", "key", "priority"],
+      "properties": {
+        "pkg": { "type": "string", "minLength": 1 },
+        "app": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 2048 },
+        "text": { "type": "string", "maxLength": 2048 },
+        "ts": { "type": "integer" },
+        "key": { "type": "string", "minLength": 1 },
+        "priority": { "enum": ["low", "normal", "high"] }
+      }
+    },
+
+    "fileOffer": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "file.offer" },
+            "payload": { "$ref": "#/$defs/fileOfferPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "fileOfferPayload": {
+      "type": "object",
+      "required": ["tid", "name", "size", "mime"],
+      "properties": {
+        "tid": { "$ref": "#/$defs/tid" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "size": { "type": "integer", "minimum": 0 },
+        "mime": { "type": "string", "minLength": 1, "maxLength": 255 }
+      }
+    },
+
+    "fileAccept": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "file.accept" },
+            "payload": { "$ref": "#/$defs/fileAcceptPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "fileAcceptPayload": {
+      "type": "object",
+      "required": ["tid", "offset"],
+      "properties": {
+        "tid": { "$ref": "#/$defs/tid" },
+        "offset": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "fileReject": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "file.reject" },
+            "payload": { "$ref": "#/$defs/fileRejectPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "fileRejectPayload": {
+      "type": "object",
+      "required": ["tid", "reason"],
+      "properties": {
+        "tid": { "$ref": "#/$defs/tid" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 255 }
+      }
+    },
+
+    "fileComplete": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "file.complete" },
+            "payload": { "$ref": "#/$defs/fileCompletePayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "fileCompletePayload": {
+      "type": "object",
+      "required": ["tid", "sha256"],
+      "properties": {
+        "tid": { "$ref": "#/$defs/tid" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+
+    "fileCancel": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "file.cancel" },
+            "payload": { "$ref": "#/$defs/fileCancelPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "fileCancelPayload": {
+      "type": "object",
+      "required": ["tid"],
+      "properties": {
+        "tid": { "$ref": "#/$defs/tid" }
+      }
+    },
+
+    "error": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "error" },
+            "payload": { "$ref": "#/$defs/errorPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "errorPayload": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "enum": [
+            "proto_unsupported",
+            "unpaired",
+            "unknown_device",
+            "pin_mismatch",
+            "bad_payload",
+            "disk_full",
+            "hash_mismatch",
+            "transfer_not_found",
+            "too_large"
+          ]
+        },
+        "message": { "type": "string", "maxLength": 512 }
+      }
+    }
+  }
+}
