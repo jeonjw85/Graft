@@ -1,0 +1,11 @@
+.DS_Store
+docs/superpowers/
+macos/.build/
+macos/*.xcodeproj/
+macos/*.xcworkspace/
+android/.gradle/
+android/**/build/
+android/local.properties
+.idea/
+*.iml
+*.xcuserstate
