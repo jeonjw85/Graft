@@ -46,8 +46,13 @@ class GraftClient(
     private var webSocket: WebSocket? = null
     private var client: OkHttpClient? = null
 
+    /** Set by the trust manager when the server chain is verified, read on open. */
+    internal val lastVerifiedServerFingerprint = java.util.concurrent.atomic.AtomicReference<String?>(null)
+
     fun connect(): Flow<ConnectionEvent> = callbackFlow {
         trySend(ConnectionEvent.Connecting)
+
+        trustManager.onServerVerified = { lastVerifiedServerFingerprint.set(it) }
 
         val okHttp = OkHttpClient.Builder()
             .sslSocketFactory(socketFactory(), trustManager)
@@ -63,13 +68,15 @@ class GraftClient(
             request,
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
+                    // The handshake stores the peer certificate as seen by the socket; OkHttp may
+                    // expose an empty list through the response, so fall back to the last pinned
+                    // fingerprint the trust manager verified.
                     val certificate = response.handshake?.peerCertificates?.firstOrNull()
                         as? java.security.cert.X509Certificate
-                    trySend(
-                        ConnectionEvent.Secure(
-                            certificate?.let(PinnedTrustManager::fingerprintOf) ?: ""
-                        )
-                    )
+                    val fingerprint = certificate?.let(PinnedTrustManager::fingerprintOf)
+                        ?: lastVerifiedServerFingerprint.get()
+                        ?: ""
+                    trySend(ConnectionEvent.Secure(fingerprint))
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {

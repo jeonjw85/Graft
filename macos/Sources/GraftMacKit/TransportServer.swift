@@ -14,7 +14,9 @@ public final class TransportServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "kr.jjw.graft.server")
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: TransportConnection] = [:]
-    private(set) var port: UInt16?
+    private var pendingFingerprints: [ObjectIdentifier: String] = [:]
+    private let fingerprintLock = NSLock()
+    public private(set) var port: UInt16?
 
     public var onConnection: ((TransportConnection) -> Void)?
 
@@ -34,6 +36,7 @@ public final class TransportServer: @unchecked Sendable {
         sec_protocol_options_set_peer_authentication_required(securityOptions, true)
 
         let authorizer = self.authorizer
+        let recordFingerprint = self.recordFingerprint
         sec_protocol_options_set_verify_block(securityOptions, { _, peerTrust, complete in
             let trust = sec_trust_copy_ref(peerTrust).takeRetainedValue()
             let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate] ?? []
@@ -42,7 +45,11 @@ public final class TransportServer: @unchecked Sendable {
                 complete(false)
                 return
             }
-            complete(authorizer.isAuthorized(fingerprint))
+            let authorized = authorizer.isAuthorized(fingerprint)
+            if authorized {
+                recordFingerprint(fingerprint, peerTrust)
+            }
+            complete(authorized)
         }, queue)
 
         let webSocketOptions = NWProtocolWebSocket.Options()
@@ -70,6 +77,7 @@ public final class TransportServer: @unchecked Sendable {
                 return
             }
             let transport = TransportConnection(connection: connection, queue: self.queue)
+            transport.peerFingerprint = self.takeFingerprint(connection: connection)
             transport.onClose = { [weak self] key in
                 self?.connections.removeValue(forKey: key)
             }
@@ -97,6 +105,27 @@ public final class TransportServer: @unchecked Sendable {
             Thread.sleep(forTimeInterval: 0.02)
         }
         throw TransportError.listenerTimedOut
+    }
+
+    // The verify block only receives the trust object, not the NWConnection, so the fingerprint is
+    // stored under the trust's identity and paired with the connection before it is handed out.
+    private var fingerprintsByTrust: [ObjectIdentifier: String] = [:]
+
+    private func recordFingerprint(_ fingerprint: String, trust: sec_trust_t) {
+        let key = ObjectIdentifier(trust as AnyObject)
+        fingerprintLock.lock()
+        fingerprintsByTrust[key] = fingerprint
+        fingerprintLock.unlock()
+    }
+
+    private func takeFingerprint(connection: NWConnection) -> String? {
+        // NWConnection does not expose the trust object; the single-peer case is the common one, so
+        // consume the oldest recorded fingerprint.
+        fingerprintLock.lock()
+        defer { fingerprintLock.unlock() }
+        guard let entry = fingerprintsByTrust.first else { return nil }
+        fingerprintsByTrust.removeValue(forKey: entry.key)
+        return entry.value
     }
 
     public func stop() {
@@ -169,6 +198,9 @@ public final class TransportConnection: @unchecked Sendable {
     public func receive(_ handler: @escaping (Envelope) -> Void) {
         handlers.append(handler)
     }
+
+    /// The authenticated peer's SPKI fingerprint, recorded during the TLS handshake.
+    public internal(set) var peerFingerprint: String?
 
     public func close() {
         connection.cancel()

@@ -78,4 +78,20 @@ final class PairingTokenStoreTests: XCTestCase {
         XCTAssertFalse(store.attempt(token: first.value, now: now), "only the newest token is valid")
         XCTAssertTrue(store.attempt(token: second.value, now: now))
     }
+
+    func testTokenIsInactiveAfterConsumption() {
+        var store = PairingTokenStore()
+        let token = store.issue(now: now)
+        XCTAssertTrue(store.isActive(now: now))
+
+        XCTAssertTrue(store.attempt(token: token.value, now: now))
+        XCTAssertFalse(store.isActive(now: now), "a consumed token must close the pairing window")
+    }
+
+    func testTokenIsInactiveAfterExpiry() {
+        var store = PairingTokenStore(ttl: 120)
+        _ = store.issue(now: now)
+
+        XCTAssertFalse(store.isActive(now: now.addingTimeInterval(121)))
+    }
 }

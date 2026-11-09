@@ -15,12 +15,17 @@ import kr.jjw.graft.core.SpkiFingerprint
 class PinnedTrustManager(
     private val allowedFingerprints: () -> Set<String>,
 ) : X509TrustManager {
+    /** Invoked with the verified server fingerprint so callers can report the authenticated peer. */
+    @Volatile
+    var onServerVerified: ((String) -> Unit)? = null
+
     override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
         requirePinned(chain, "client")
     }
 
     override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
         requirePinned(chain, "server")
+        chain?.firstOrNull()?.let { onServerVerified?.invoke(fingerprintOf(it)) }
     }
 
     override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()

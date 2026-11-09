@@ -1,33 +1,29 @@
 import Foundation
-import GraftProtocol
-import Network
-import Security
 
 /// Decides whether a peer certificate may connect.
 ///
-/// A peer is authorized when its fingerprint is in the stored peer list, or when a pairing window
-/// is open. The window is bounded by the token's lifetime so an open window cannot be left behind.
-public final class PeerAuthorizer {
+/// A peer is authorized when its fingerprint is in the stored peer list, or while a pairing window
+/// is open. The window is a closure rather than a captured token store so the server and the
+/// pairing service always read the same state; a copied struct would silently disagree.
+public final class PeerAuthorizer: @unchecked Sendable {
     private let allowed: () -> Set<String>
-    private let tokens: PairingTokenStore
+    private let isPairingOpen: () -> Bool
     private let clock: () -> Date
-    private var windowOpenedAt: Date?
+    public private(set) var windowOpenedAt: Date?
 
     public init(
         allowed: @escaping () -> Set<String>,
-        tokens: PairingTokenStore,
+        isPairingOpen: @escaping () -> Bool = { false },
         clock: @escaping () -> Date = Date.init
     ) {
         self.allowed = allowed
-        self.tokens = tokens
+        self.isPairingOpen = isPairingOpen
         self.clock = clock
     }
 
     public func isAuthorized(_ fingerprint: String) -> Bool {
         if allowed().contains(fingerprint) { return true }
-        guard let windowOpenedAt else { return false }
-        guard let expiresAt = tokens.expiresAt, clock() < expiresAt else { return false }
-        return windowOpenedAt <= expiresAt
+        return isPairingOpen()
     }
 
     public func openPairingWindow() {

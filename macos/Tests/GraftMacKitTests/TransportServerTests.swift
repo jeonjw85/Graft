@@ -9,34 +9,31 @@ final class PeerAuthorizerTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_762_752_000)
 
     func testRejectsUnknownPeerByDefault() {
-        let authorizer = PeerAuthorizer(allowed: { [] }, tokens: PairingTokenStore())
+        let authorizer = PeerAuthorizer(allowed: { [] })
         XCTAssertFalse(authorizer.isAuthorized("unrelated-fingerprint"))
     }
 
     func testAcceptsStoredPeer() {
-        let authorizer = PeerAuthorizer(allowed: { ["pinned"] }, tokens: PairingTokenStore())
+        let authorizer = PeerAuthorizer(allowed: { ["pinned"] })
         XCTAssertTrue(authorizer.isAuthorized("pinned"))
     }
 
-    func testAcceptsTemporaryPeerWhilePairingWindowIsOpen() {
-        var tokens = PairingTokenStore()
-        _ = tokens.issue(now: now)
-        let authorizer = PeerAuthorizer(allowed: { [] }, tokens: tokens, clock: { self.now })
+    func testAcceptsUnknownPeerWhilePairingIsOpen() {
+        var isOpen = false
+        let authorizer = PeerAuthorizer(allowed: { [] }, isPairingOpen: { isOpen })
 
-        XCTAssertFalse(authorizer.isAuthorized("new-phone"), "no window yet")
-        authorizer.openPairingWindow()
-        XCTAssertTrue(authorizer.isAuthorized("new-phone"), "window admits an unknown peer")
+        XCTAssertFalse(authorizer.isAuthorized("new-phone"))
+        isOpen = true
+        XCTAssertTrue(authorizer.isAuthorized("new-phone"))
     }
 
-    func testWindowExpiresWithTheToken() {
-        var tokens = PairingTokenStore(ttl: 120)
-        _ = tokens.issue(now: now)
-        var currentTime = now
-        let authorizer = PeerAuthorizer(allowed: { [] }, tokens: tokens, clock: { currentTime })
-        authorizer.openPairingWindow()
+    func testWindowClosesWhenPairingCloses() {
+        var isOpen = true
+        let authorizer = PeerAuthorizer(allowed: { [] }, isPairingOpen: { isOpen })
+        XCTAssertTrue(authorizer.isAuthorized("new-phone"))
 
-        currentTime = now.addingTimeInterval(121)
-        XCTAssertFalse(authorizer.isAuthorized("new-phone"))
+        isOpen = false
+        XCTAssertFalse(authorizer.isAuthorized("new-phone"), "a consumed token must stop admitting peers")
     }
 }
 
@@ -70,7 +67,7 @@ final class TransportServerTests: XCTestCase {
             DeviceIdentity.delete(tag: "kr.jjw.graft.test.client.\(UUID().uuidString)")
         }
 
-        let authorizer = PeerAuthorizer(allowed: { [clientIdentity.fingerprint] }, tokens: PairingTokenStore())
+        let authorizer = PeerAuthorizer(allowed: { [clientIdentity.fingerprint] })
         let server = TransportServer(identity: serverIdentity, authorizer: authorizer, port: freePort())
 
         let received = expectation(description: "server received hello")
@@ -121,7 +118,7 @@ final class TransportServerTests: XCTestCase {
             DeviceIdentity.delete(tag: "kr.jjw.graft.test.stranger.\(UUID().uuidString)")
         }
 
-        let authorizer = PeerAuthorizer(allowed: { [] }, tokens: PairingTokenStore())
+        let authorizer = PeerAuthorizer(allowed: { [] })
         let server = TransportServer(identity: serverIdentity, authorizer: authorizer, port: freePort())
 
         let accepted = expectation(description: "server must not accept")

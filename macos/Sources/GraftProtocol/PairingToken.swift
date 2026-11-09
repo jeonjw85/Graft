@@ -71,6 +71,15 @@ public struct PairingTokenStore {
         current?.expiresAt
     }
 
+    /// True while a token exists, has not been consumed, and has not expired.
+    ///
+    /// The TLS layer admits unknown peers while this is true, so it must become false the moment
+    /// the token is used; otherwise a second unknown device could still complete a handshake.
+    public func isActive(now: Date) -> Bool {
+        guard let current, !consumed else { return false }
+        return now < current.expiresAt
+    }
+
     private mutating func recordAttempt(now: Date) {
         attempts.append(now)
         pruneAttempts(now: now)
