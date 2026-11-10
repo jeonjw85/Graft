@@ -127,6 +127,7 @@ fun main(args: Array<String>) {
                         }
 
                         ConnectionEvent.Connecting -> Unit
+                        is ConnectionEvent.Binary -> Unit
                     }
                 }
             }
@@ -224,6 +225,7 @@ private fun refusedPairing(offer: kr.jjw.graft.core.PairingOffer): Boolean {
 
                         is ConnectionEvent.Closed -> latch.countDown()
                         ConnectionEvent.Connecting -> Unit
+                        is ConnectionEvent.Binary -> Unit
                     }
                 }
             }
@@ -299,6 +301,7 @@ private fun replayPairing(
                         is ConnectionEvent.Closed -> latch.countDown()
 
                         ConnectionEvent.Connecting -> Unit
+                        is ConnectionEvent.Binary -> Unit
                     }
                 }
             }
@@ -315,3 +318,4 @@ private fun replayPairing(
         else -> ReplayOutcome.NO_VERDICT
     }
 }
+

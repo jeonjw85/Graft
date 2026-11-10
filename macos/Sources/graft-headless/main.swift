@@ -10,6 +10,8 @@ struct Arguments {
     var identityTag = "kr.jjw.graft.headless"
     var deviceName = "Graft Headless"
     var host = "127.0.0.1"
+    var sendPath: String?
+    var receiveDir: String?
 }
 
 func parseArguments() -> Arguments {
@@ -25,6 +27,10 @@ func parseArguments() -> Arguments {
             if let value = iterator.next() { arguments.deviceName = value }
         case "--host":
             if let value = iterator.next() { arguments.host = value }
+        case "--send":
+            if let value = iterator.next() { arguments.sendPath = value }
+        case "--receive-dir":
+            if let value = iterator.next() { arguments.receiveDir = value }
         default:
             continue
         }
@@ -87,12 +93,46 @@ do {
         let key = ObjectIdentifier(connection)
         withSessions { sessions[key] = session }
 
+        let receiveDirectory = URL(
+            fileURLWithPath: arguments.receiveDir ?? NSTemporaryDirectory() + "graft-received-${UUID().uuidString}"
+        )
+        var transferId: UInt32 = 1
+        let coordinator = TransferCoordinator(
+            directory: receiveDirectory,
+            isPaired: { true },
+            sendControl: { envelope in try? connection.send(envelope) },
+            sendBinary: { data in try? connection.sendBinary(data) }
+        )
+
+        connection.receiveBinary { data in
+            coordinator.onBinary(data)
+        }
+
         connection.receive { envelope in
             let result = withSessions { () -> [SessionAction] in
                 guard let active = sessions[key] else { return [] }
                 return active.handle(envelope: envelope)
             }
             _ = result
+
+            coordinator.onControl(envelope)
+            if envelope.type == "file.offer" || envelope.type == "file.accept" {
+                FileHandle.standardError.write(Data("\(envelope.type)\n".utf8))
+            }
+
+            // Auto-offer the requested file once the peer is ready, so the e2e test does not need
+            // a human to press a button.
+            if envelope.type == "hello.ok" || envelope.type == "pair.ok" || envelope.type == "hello" {
+                if let path = arguments.sendPath, coordinator.progress.isEmpty {
+                    try? coordinator.offer(url: URL(fileURLWithPath: path), transferId: transferId)
+                    transferId += 1
+                }
+            }
+
+            if let completed = coordinator.completed.first,
+               coordinator.progress[completed]?.fraction == 1.0 {
+                print("TRANSFER_COMPLETE \(receiveDirectory.path)")
+            }
         }
 
         // Heartbeat and dead-connection detection are driven here so they are exercised on every

@@ -22,6 +22,7 @@ sealed interface ConnectionEvent {
     data object Connecting : ConnectionEvent
     data class Secure(val serverFingerprint: String) : ConnectionEvent
     data class Message(val envelope: Envelope) : ConnectionEvent
+    data class Binary(val data: ByteArray) : ConnectionEvent
     data class Closed(val reason: TransportCloseReason) : ConnectionEvent
 }
 
@@ -81,6 +82,10 @@ class GraftClient(
                         ?: lastVerifiedServerFingerprint.get()
                         ?: ""
                     trySend(ConnectionEvent.Secure(fingerprint))
+                }
+
+                override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+                    trySend(ConnectionEvent.Binary(bytes.toByteArray()))
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
