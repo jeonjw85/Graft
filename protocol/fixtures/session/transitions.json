@@ -7,6 +7,8 @@
     { "from": "authenticating", "event": "pairRequest", "to": "unpaired", "actions": [] },
     { "from": "authenticating", "event": "helloReceived", "to": "ready", "actions": ["sendHelloOk", "startHeartbeat"] },
     { "from": "authenticating", "event": "tlsFailed", "to": "disconnected", "actions": ["scheduleReconnect"] },
+    { "from": "authenticating", "event": "messageReceived", "to": "closing", "actions": ["sendErrorUnpaired", "closeConnection"] },
+    { "from": "authenticating", "event": "pingReceived", "to": "closing", "actions": ["sendErrorUnpaired", "closeConnection"] },
     { "from": "unpaired", "event": "pairRequest", "to": "pairing", "actions": [] },
     { "from": "unpaired", "event": "messageReceived", "to": "closing", "actions": ["sendErrorUnpaired", "closeConnection"] },
     { "from": "pairing", "event": "pairAccepted", "to": "paired", "actions": ["sendPairOk", "sendHello"] },

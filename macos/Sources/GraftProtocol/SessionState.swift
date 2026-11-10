@@ -108,6 +108,11 @@ public struct SessionMachine {
             phase = .ready
             return [.sendHelloOk, .startHeartbeat]
 
+        case (.authenticating, .messageReceived), (.authenticating, .pingReceived):
+            // Before pairing, anything other than pair.request is refused and the socket is closed.
+            phase = .closing
+            return [.sendErrorUnpaired, .closeConnection]
+
         case (.unpaired, .pairRequest):
             phase = .pairing
             return []

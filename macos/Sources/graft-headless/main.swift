@@ -3,7 +3,7 @@ import GraftMacKit
 import GraftProtocol
 
 // Headless harness used by the end-to-end test. It prints a pairing URI, accepts one peer, and
-// applies the protocol rules from PairingService so a real client can exercise pairing over TLS.
+// drives the shared session machine plus heartbeat so the production path is what gets tested.
 
 struct Arguments {
     var port: UInt16 = 47800
@@ -44,29 +44,53 @@ do {
     )
 
     let server = TransportServer(identity: identity, authorizer: authorizer, port: arguments.port)
-    server.onConnection = { connection in
-        connection.receive { envelope in
-            // Fail closed: without an authenticated fingerprint we cannot tell who this is.
-            // Fail closed: without an authenticated fingerprint we cannot tell who this is.
-            guard let peerFingerprint = connection.peerFingerprint else {
-                connection.close()
-                return
-            }
-            let outcome = service.handle(envelope: envelope, peerFingerprint: peerFingerprint, now: Date())
-            // Send the final reply first, then close: closing immediately drops the frame and the
-            // peer would see only a bare socket close.
-            for reply in outcome.replies.dropLast() {
-                try? connection.send(reply)
-            }
-            if let last = outcome.replies.last {
-                try? connection.send(last) {
-                    if outcome.close { connection.close() }
-                }
-            } else if outcome.close {
-                connection.close()
-            }
-        }
+    let queue = DispatchQueue(label: "kr.jjw.graft.headless")
+    var sessions: [ObjectIdentifier: ConnectionSession] = [:]
+    var timers: [ObjectIdentifier: DispatchSourceTimer] = [:]
+
+    let lock = NSLock()
+    func withSessions<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
     }
+
+    server.onConnection = { connection in
+        guard let peerFingerprint = connection.peerFingerprint else {
+            connection.close()
+            return
+        }
+
+        let session = ConnectionSession(
+            service: service,
+            send: { envelope in try? connection.send(envelope) },
+            close: { connection.close() }
+        )
+        session.peerFingerprint = peerFingerprint
+        session.start()
+
+        let key = ObjectIdentifier(connection)
+        withSessions { sessions[key] = session }
+
+        connection.receive { envelope in
+            let result = withSessions { () -> [SessionAction] in
+                guard let active = sessions[key] else { return [] }
+                return active.handle(envelope: envelope)
+            }
+            _ = result
+        }
+
+        // Heartbeat and dead-connection detection are driven here so they are exercised on every
+        // connection instead of living only in unit tests.
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 1, repeating: 1)
+        timer.setEventHandler {
+            withSessions { sessions[key]?.tick() }
+        }
+        timer.resume()
+        withSessions { timers[key] = timer }
+    }
+
     try server.start()
 
     let pairing = service.beginPairing(

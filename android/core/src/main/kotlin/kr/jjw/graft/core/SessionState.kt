@@ -102,6 +102,11 @@ class SessionMachine(phase: SessionPhase = SessionPhase.disconnected) {
                     phase = SessionPhase.ready
                     return listOf(SessionAction.sendHelloOk, SessionAction.startHeartbeat)
                 }
+                is SessionEvent.MessageReceived, is SessionEvent.PingReceived -> {
+                    // Before pairing, anything other than pair.request is refused and closed.
+                    phase = SessionPhase.closing
+                    return listOf(SessionAction.sendErrorUnpaired, SessionAction.closeConnection)
+                }
                 else -> Unit
             }
 
