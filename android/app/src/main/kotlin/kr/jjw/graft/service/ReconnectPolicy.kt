@@ -47,6 +47,10 @@ class ReconnectPolicy(
                 backoff.reset()
             }
 
+            is ConnectionEvent.Binary -> {
+                // File data does not change the connection verdict.
+            }
+
             is ConnectionEvent.Closed -> onClosed(event.reason)
         }
     }
