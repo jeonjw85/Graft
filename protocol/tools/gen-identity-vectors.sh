@@ -55,6 +55,20 @@ if $check; then
             failures=$((failures + 1))
         fi
     done
+    # expected.json is what both test suites read; keep it in step with the per-file fixtures.
+    if [[ -f "$dir/expected.json" ]]; then
+        for name in tv1 tv2; do
+            spki_value="$(tr -d '\n' < "$dir/$name.spki.hex")"
+            fp_value="$(tr -d '\n' < "$dir/$name.fp")"
+            json_spki="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print([v['spkiHex'] for v in d['vectors'] if v['name']==sys.argv[2]][0])" "$dir/expected.json" "$name")"
+            json_fp="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print([v['sha256Base64Url'] for v in d['vectors'] if v['name']==sys.argv[2]][0])" "$dir/expected.json" "$name")"
+            if [[ "$spki_value" != "$json_spki" || "$fp_value" != "$json_fp" ]]; then
+                echo "expected.json disagrees with $name fixtures" >&2
+                failures=$((failures + 1))
+            fi
+        done
+    fi
+
     if (( failures > 0 )); then
         echo "identity vectors are inconsistent" >&2
         exit 1

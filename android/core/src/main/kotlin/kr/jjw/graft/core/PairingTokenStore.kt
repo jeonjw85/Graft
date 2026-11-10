@@ -39,8 +39,11 @@ class PairingTokenStore(
     }
 
     fun attempt(token: String, now: Long): Boolean {
-        recordAttempt(now)
-        if (isRateLimited(now)) return false
+        // Check the budget before recording, otherwise the fifth legitimate attempt is always
+        // rejected: recording first makes the count reach the limit one attempt too early.
+        pruneAttempts(now)
+        if (attempts.size >= maxAttempts) return false
+        attempts.add(now)
 
         val active = current ?: return false
         if (consumed) return false
@@ -52,12 +55,17 @@ class PairingTokenStore(
     }
 
     fun isRateLimited(now: Long): Boolean {
-        attempts.removeAll { now - it >= windowMillis }
+        pruneAttempts(now)
         return attempts.size >= maxAttempts
     }
 
-    private fun recordAttempt(now: Long) {
-        attempts.add(now)
+    /** True while a token exists, has not been consumed, and has not expired. */
+    fun isActive(now: Long): Boolean {
+        val active = current ?: return false
+        return !consumed && now < active.expiresAtMillis
+    }
+
+    private fun pruneAttempts(now: Long) {
         attempts.removeAll { now - it >= windowMillis }
     }
 

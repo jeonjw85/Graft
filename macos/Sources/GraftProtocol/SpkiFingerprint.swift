@@ -35,6 +35,16 @@ public enum SpkiFingerprint {
         return try base64URL(publicKey: key)
     }
 
+    /// Builds the SPKI from a raw uncompressed P-256 point (`04 || X || Y`) and hashes it.
+    ///
+    /// Exposed so tests can pin the construction step independently of any certificate.
+    public static func base64URL(publicKeyPoint point: Data) throws -> String {
+        guard point.count == 65, point.first == 0x04 else {
+            throw SpkiError.unsupportedKeyType
+        }
+        return base64URL(spki: p256SpkiPrefix + point)
+    }
+
     public static func base64URL(publicKey: SecKey) throws -> String {
         // Structural check instead of attribute lookup: a P-256 public key is exactly the
         // 65-byte uncompressed point. Keys materialized from a certificate may not carry

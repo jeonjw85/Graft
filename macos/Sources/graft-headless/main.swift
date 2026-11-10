@@ -46,14 +46,23 @@ do {
     let server = TransportServer(identity: identity, authorizer: authorizer, port: arguments.port)
     server.onConnection = { connection in
         connection.receive { envelope in
-            // The fingerprint the TLS layer authenticated; falling back to "unknown" makes any
-            // protocol-level check fail closed rather than trusting the peer's word.
-            let peerFingerprint = connection.peerFingerprint ?? "unknown"
+            // Fail closed: without an authenticated fingerprint we cannot tell who this is.
+            // Fail closed: without an authenticated fingerprint we cannot tell who this is.
+            guard let peerFingerprint = connection.peerFingerprint else {
+                connection.close()
+                return
+            }
             let outcome = service.handle(envelope: envelope, peerFingerprint: peerFingerprint, now: Date())
-            for reply in outcome.replies {
+            // Send the final reply first, then close: closing immediately drops the frame and the
+            // peer would see only a bare socket close.
+            for reply in outcome.replies.dropLast() {
                 try? connection.send(reply)
             }
-            if outcome.close {
+            if let last = outcome.replies.last {
+                try? connection.send(last) {
+                    if outcome.close { connection.close() }
+                }
+            } else if outcome.close {
                 connection.close()
             }
         }

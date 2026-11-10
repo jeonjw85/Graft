@@ -151,4 +151,73 @@ fun main(args: Array<String>) {
 
     println("PAIRED fingerprint=${identity.fingerprint} server=${offer.fingerprint}")
     println("HELLO_OK")
+
+    // Replay the same token on a fresh connection using the SAME identity. A new identity would be
+    // rejected at the TLS layer, which would prove nothing about token reuse.
+    val replayRejected = replayPairing(offer, identity)
+    if (!replayRejected) {
+        System.err.println("FAILED: the server accepted a replayed pairing token")
+        exitProcess(1)
+    }
+    println("REPLAY_REJECTED")
+
+    // Gradle's non-daemon threads keep the JVM alive for a minute; exit explicitly.
+    exitProcess(0)
+}
+
+private fun replayPairing(
+    offer: kr.jjw.graft.core.PairingOffer,
+    identity: DeviceIdentity,
+): Boolean {
+    val client = GraftClient(
+        baseUrl = "wss://${offer.host}:${offer.port}/graft",
+        trustManager = PinnedTrustManager { setOf(offer.fingerprint) },
+        keyManager = IdentityKeyManager(
+            alias = "e2e",
+            privateKey = identity.privateKey,
+            chain = arrayOf(identity.certificate),
+        ),
+    )
+    val latch = CountDownLatch(1)
+    val rejected = java.util.concurrent.atomic.AtomicBoolean(false)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val job = scope.launch {
+        runCatching {
+            withTimeout(20_000) {
+                client.connect().collect { event ->
+                    when (event) {
+                        is ConnectionEvent.Secure -> client.send(
+                            Envelope.create(
+                                type = "pair.request",
+                                payload = buildJsonObject {
+                                    put("token", offer.token)
+                                    put("deviceId", "e2e-device")
+                                    put("name", "E2E Peer")
+                                    put("platform", "android")
+                                }
+                            )
+                        )
+
+                        is ConnectionEvent.Message -> {
+                            val payload = event.envelope.payload.jsonObject
+                            val code = payload["code"]?.jsonPrimitive?.content
+                            if (event.envelope.type == "error" && code == "unpaired") {
+                                rejected.set(true)
+                            }
+                            if (event.envelope.type == "pair.ok") rejected.set(false)
+                            latch.countDown()
+                        }
+
+                        is ConnectionEvent.Closed -> latch.countDown()
+
+                        ConnectionEvent.Connecting -> Unit
+                    }
+                }
+            }
+        }
+    }
+    val finished = latch.await(25, TimeUnit.SECONDS)
+    job.cancel()
+    client.close()
+    return finished && rejected.get()
 }

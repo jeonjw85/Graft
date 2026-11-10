@@ -40,12 +40,36 @@ final class SpkiFingerprintTests: XCTestCase {
             )
         }
     }
+
+    func testRawPointConstructsTheSameSpkiAsOpenSSL() throws {
+        // The fixture stores the full SPKI and the raw point. Building the SPKI from the point is
+        // exactly what base64URL(certificate:) does, so this pins the construction step that the
+        // hash-only test above cannot cover.
+        let vector = try XCTUnwrap(try IdentityVectors.load().first)
+
+        XCTAssertEqual(vector.spki.count, 91)
+        XCTAssertEqual(vector.rawPoint.count, 65)
+        XCTAssertEqual(vector.spki.suffix(65), vector.rawPoint)
+        XCTAssertEqual(
+            try SpkiFingerprint.base64URL(publicKeyPoint: vector.rawPoint),
+            vector.fingerprint
+        )
+    }
+
+    func testRejectsPointWithWrongLength() {
+        XCTAssertThrowsError(
+            try SpkiFingerprint.base64URL(publicKeyPoint: Data(repeating: 0x04, count: 64))
+        ) {
+            XCTAssertEqual($0 as? SpkiError, .unsupportedKeyType)
+        }
+    }
 }
 
 enum IdentityVectors {
     struct Vector {
         let name: String
         let spki: Data
+        let rawPoint: Data
         let fingerprint: String
     }
 
@@ -59,10 +83,16 @@ enum IdentityVectors {
         return try rows.map { row in
             guard let name = row["name"] as? String,
                   let spkiHex = row["spkiHex"] as? String,
+                  let pointHex = row["publicKeyHex"] as? String,
                   let fingerprint = row["sha256Base64Url"] as? String else {
                 throw NSError(domain: "IdentityVectors", code: 2)
             }
-            return Vector(name: name, spki: Data(hexString: spkiHex), fingerprint: fingerprint)
+            return Vector(
+                name: name,
+                spki: Data(hexString: spkiHex),
+                rawPoint: Data(hexString: pointHex),
+                fingerprint: fingerprint
+            )
         }
     }
 }

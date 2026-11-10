@@ -1,6 +1,7 @@
 package kr.jjw.graft.core.transport
 
 import java.security.MessageDigest
+import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import javax.net.ssl.X509TrustManager
 import kr.jjw.graft.core.SpkiFingerprint
@@ -19,12 +20,27 @@ class PinnedTrustManager(
     @Volatile
     var onServerVerified: ((String) -> Unit)? = null
 
+    /** Set when this manager itself rejected a chain, so callers can tell pin failures apart. */
+    @Volatile
+    var lastRejectionWasPin: Boolean = false
+
     override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
-        requirePinned(chain, "client")
+        try {
+            requirePinned(chain, "client")
+        } catch (error: IllegalArgumentException) {
+            lastRejectionWasPin = true
+            throw CertificateException(error.message)
+        }
     }
 
     override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
-        requirePinned(chain, "server")
+        try {
+            requirePinned(chain, "server")
+        } catch (error: IllegalArgumentException) {
+            lastRejectionWasPin = true
+            throw java.security.cert.CertificateException(error.message)
+        }
+        lastRejectionWasPin = false
         chain?.firstOrNull()?.let { onServerVerified?.invoke(fingerprintOf(it)) }
     }
 

@@ -120,12 +120,40 @@ class PairingTokenStoreTest {
     @Test
     fun `sixth attempt inside the window is rejected`() {
         val store = PairingTokenStore(maxAttempts = 5)
-        store.issue(now)
+        val token = store.issue(now)
 
         repeat(5) { index -> store.attempt("wrong-$index-value-here", now) }
 
-        assertEquals(false, store.attempt("wrong-5-value-here", now))
+        assertEquals(false, store.attempt(token.value, now))
         assertEquals(true, store.isRateLimited(now))
+    }
+
+    @Test
+    fun `fifth attempt with the correct token succeeds`() {
+        val store = PairingTokenStore(maxAttempts = 5)
+        val token = store.issue(now)
+
+        repeat(4) { index -> store.attempt("wrong-$index-value-here", now) }
+
+        assertEquals(true, store.attempt(token.value, now))
+    }
+
+    @Test
+    fun `token is inactive after consumption`() {
+        val store = PairingTokenStore()
+        val token = store.issue(now)
+        assertEquals(true, store.isActive(now))
+
+        assertEquals(true, store.attempt(token.value, now))
+        assertEquals(false, store.isActive(now))
+    }
+
+    @Test
+    fun `token is inactive after expiry`() {
+        val store = PairingTokenStore(ttlMillis = 120_000)
+        store.issue(now)
+
+        assertEquals(false, store.isActive(now + 121_000))
     }
 
     @Test

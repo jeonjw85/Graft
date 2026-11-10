@@ -14,8 +14,6 @@ public final class TransportServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "kr.jjw.graft.server")
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: TransportConnection] = [:]
-    private var pendingFingerprints: [ObjectIdentifier: String] = [:]
-    private let fingerprintLock = NSLock()
     public private(set) var port: UInt16?
 
     public var onConnection: ((TransportConnection) -> Void)?
@@ -36,7 +34,6 @@ public final class TransportServer: @unchecked Sendable {
         sec_protocol_options_set_peer_authentication_required(securityOptions, true)
 
         let authorizer = self.authorizer
-        let recordFingerprint = self.recordFingerprint
         sec_protocol_options_set_verify_block(securityOptions, { _, peerTrust, complete in
             let trust = sec_trust_copy_ref(peerTrust).takeRetainedValue()
             let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate] ?? []
@@ -45,11 +42,7 @@ public final class TransportServer: @unchecked Sendable {
                 complete(false)
                 return
             }
-            let authorized = authorizer.isAuthorized(fingerprint)
-            if authorized {
-                recordFingerprint(fingerprint, peerTrust)
-            }
-            complete(authorized)
+            complete(authorizer.isAuthorized(fingerprint))
         }, queue)
 
         let webSocketOptions = NWProtocolWebSocket.Options()
@@ -77,7 +70,6 @@ public final class TransportServer: @unchecked Sendable {
                 return
             }
             let transport = TransportConnection(connection: connection, queue: self.queue)
-            transport.peerFingerprint = self.takeFingerprint(connection: connection)
             transport.onClose = { [weak self] key in
                 self?.connections.removeValue(forKey: key)
             }
@@ -107,34 +99,16 @@ public final class TransportServer: @unchecked Sendable {
         throw TransportError.listenerTimedOut
     }
 
-    // The verify block only receives the trust object, not the NWConnection, so the fingerprint is
-    // stored under the trust's identity and paired with the connection before it is handed out.
-    private var fingerprintsByTrust: [ObjectIdentifier: String] = [:]
-
-    private func recordFingerprint(_ fingerprint: String, trust: sec_trust_t) {
-        let key = ObjectIdentifier(trust as AnyObject)
-        fingerprintLock.lock()
-        fingerprintsByTrust[key] = fingerprint
-        fingerprintLock.unlock()
-    }
-
-    private func takeFingerprint(connection: NWConnection) -> String? {
-        // NWConnection does not expose the trust object; the single-peer case is the common one, so
-        // consume the oldest recorded fingerprint.
-        fingerprintLock.lock()
-        defer { fingerprintLock.unlock() }
-        guard let entry = fingerprintsByTrust.first else { return nil }
-        fingerprintsByTrust.removeValue(forKey: entry.key)
-        return entry.value
-    }
-
     public func stop() {
-        listener?.cancel()
-        listener = nil
-        for connection in connections.values {
-            connection.close()
+        // connections is owned by self.queue; mutate it there so teardown cannot race a callback.
+        queue.sync {
+            listener?.cancel()
+            listener = nil
+            for connection in connections.values {
+                connection.close()
+            }
+            connections.removeAll()
         }
-        connections.removeAll()
     }
 }
 
@@ -169,6 +143,7 @@ public final class TransportConnection: @unchecked Sendable {
             case .ready:
                 guard !self.isReady else { return }
                 self.isReady = true
+                self.peerFingerprint = Self.peerFingerprint(of: self.connection)
                 self.onReady?()
             case .failed:
                 self.onClose?(ObjectIdentifier(self))
@@ -183,6 +158,14 @@ public final class TransportConnection: @unchecked Sendable {
     }
 
     public func send(_ envelope: Envelope) throws {
+        try send(envelope, completion: nil)
+    }
+
+    /// Sends a frame and calls `completion` after it is handed to the network stack.
+    ///
+    /// Callers that close right after sending must use this: cancelling immediately can drop the
+    /// frame, so the peer never sees the error it was sent.
+    public func send(_ envelope: Envelope, completion: (() -> Void)?) throws {
         guard isReady else { throw TransportError.notReady }
         let data = try MessageCodec.encode(envelope)
         let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
@@ -191,7 +174,7 @@ public final class TransportConnection: @unchecked Sendable {
             content: data,
             contentContext: context,
             isComplete: true,
-            completion: .contentProcessed { _ in }
+            completion: .contentProcessed { _ in completion?() }
         )
     }
 
@@ -204,6 +187,37 @@ public final class TransportConnection: @unchecked Sendable {
 
     public func close() {
         connection.cancel()
+    }
+
+    /// Reads the authenticated peer's SPKI fingerprint from this connection's TLS metadata.
+    ///
+    /// `newConnectionHandler` runs before the handshake, so attribution must happen here, keyed by
+    /// the connection itself. The verify block only proves the peer is allowed; it cannot tell the
+    /// protocol layer which peer it was.
+    private static func data(from source: dispatch_data_t) -> Data {
+        var data = Data()
+        (source as DispatchData).enumerateBytes { buffer, _, _ in
+            data.append(contentsOf: buffer)
+        }
+        return data
+    }
+
+    static func peerFingerprint(of connection: NWConnection) -> String? {
+        guard let metadata = connection.metadata(definition: NWProtocolTLS.definition)
+            as? NWProtocolTLS.Metadata else {
+            return nil
+        }
+        guard let peerKey = sec_protocol_metadata_copy_peer_public_key(
+            metadata.securityProtocolMetadata
+        ) else {
+            return nil
+        }
+        let keyData = Self.data(from: peerKey)
+        // Security returns the certificate's SubjectPublicKeyInfo here (91 bytes for P-256).
+        if keyData.count == 91 {
+            return SpkiFingerprint.base64URL(spki: keyData)
+        }
+        return try? SpkiFingerprint.base64URL(publicKeyPoint: keyData)
     }
 
     private func readLoop() {

@@ -52,9 +52,12 @@ public struct PairingTokenStore {
 
     /// Consumes the token if it matches, is unexpired, unused, and the budget allows it.
     public mutating func attempt(token: String, now: Date) -> Bool {
-        recordAttempt(now: now)
+        // Check the budget before recording, otherwise the fifth legitimate attempt is always
+        // rejected: recording first makes the count reach the limit one attempt too early.
+        pruneAttempts(now: now)
+        guard attempts.count < maxAttempts else { return false }
+        attempts.append(now)
 
-        guard !isRateLimited(now: now) else { return false }
         guard let current, !consumed, now < current.expiresAt else { return false }
         guard constantTimeEquals(current.value, token) else { return false }
 
@@ -78,11 +81,6 @@ public struct PairingTokenStore {
     public func isActive(now: Date) -> Bool {
         guard let current, !consumed else { return false }
         return now < current.expiresAt
-    }
-
-    private mutating func recordAttempt(now: Date) {
-        attempts.append(now)
-        pruneAttempts(now: now)
     }
 
     private mutating func pruneAttempts(now: Date) {

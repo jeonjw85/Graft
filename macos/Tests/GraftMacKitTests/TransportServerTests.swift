@@ -60,11 +60,13 @@ private func freePort() -> UInt16 {
 
 final class TransportServerTests: XCTestCase {
     func testPeerCanSendAndReceiveAHello() throws {
-        let serverIdentity = try DeviceIdentity.loadOrCreate(tag: "kr.jjw.graft.test.server.\(UUID().uuidString)")
-        let clientIdentity = try DeviceIdentity.loadOrCreate(tag: "kr.jjw.graft.test.client.\(UUID().uuidString)")
+        let serverTag = "kr.jjw.graft.test.server.\(UUID().uuidString)"
+        let clientTag = "kr.jjw.graft.test.client.\(UUID().uuidString)"
+        let serverIdentity = try DeviceIdentity.loadOrCreate(tag: serverTag)
+        let clientIdentity = try DeviceIdentity.loadOrCreate(tag: clientTag)
         defer {
-            DeviceIdentity.delete(tag: "kr.jjw.graft.test.server.\(UUID().uuidString)")
-            DeviceIdentity.delete(tag: "kr.jjw.graft.test.client.\(UUID().uuidString)")
+            DeviceIdentity.delete(tag: serverTag)
+            DeviceIdentity.delete(tag: clientTag)
         }
 
         let authorizer = PeerAuthorizer(allowed: { [clientIdentity.fingerprint] })
@@ -111,11 +113,13 @@ final class TransportServerTests: XCTestCase {
     }
 
     func testServerRejectsUnknownClientFingerprint() throws {
-        let serverIdentity = try DeviceIdentity.loadOrCreate(tag: "kr.jjw.graft.test.server.\(UUID().uuidString)")
-        let strangerIdentity = try DeviceIdentity.loadOrCreate(tag: "kr.jjw.graft.test.stranger.\(UUID().uuidString)")
+        let serverTag = "kr.jjw.graft.test.server.\(UUID().uuidString)"
+        let strangerTag = "kr.jjw.graft.test.stranger.\(UUID().uuidString)"
+        let serverIdentity = try DeviceIdentity.loadOrCreate(tag: serverTag)
+        let strangerIdentity = try DeviceIdentity.loadOrCreate(tag: strangerTag)
         defer {
-            DeviceIdentity.delete(tag: "kr.jjw.graft.test.server.\(UUID().uuidString)")
-            DeviceIdentity.delete(tag: "kr.jjw.graft.test.stranger.\(UUID().uuidString)")
+            DeviceIdentity.delete(tag: serverTag)
+            DeviceIdentity.delete(tag: strangerTag)
         }
 
         let authorizer = PeerAuthorizer(allowed: { [] })

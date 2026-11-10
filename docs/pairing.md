@@ -8,8 +8,8 @@ Pairing trades a single-use token for a stored certificate fingerprint on both d
 2. The Android app scans the QR code and connects to the advertised address with TLS.
 3. The phone verifies that the server certificate's SPKI fingerprint equals `fp` from the QR code. On a mismatch it aborts before sending anything.
 4. The phone sends `pair.request` with the token.
-5. The Mac accepts the token once, stores the phone's fingerprint, and replies `pair.ok`. The pairing window closes as soon as the token is consumed, so a second device cannot use the same QR code.
-6. The phone stores the Mac's fingerprint. Both sides send `hello` and `hello.ok`, and the connection is ready.
+5. The Mac accepts the token once, stores the phone's fingerprint, and replies `pair.ok`. The pairing window closes as soon as the token is consumed, so a second unknown device cannot complete a handshake with that QR code.
+6. The phone stores the Mac's fingerprint. The phone sends `hello` and the Mac answers `hello.ok`, and the connection is ready.
 
 ## QR payload
 
@@ -22,7 +22,7 @@ graft://pair?v=1&h=<ip>&p=47800&fp=<SPKI-SHA256-base64url>&t=<token>&n=<device-n
 | `v` | Pairing URI version. Must be `1` |
 | `h`, `p` | Local IP address and port of the Mac |
 | `fp` | SPKI SHA-256 of the Mac's TLS certificate, base64url without padding (43 characters) |
-| `t` | Single-use token: 16 or more base64url characters, or a six-digit fallback code |
+| `t` | Single-use token: 16 to 128 base64url characters, or a six-digit fallback code |
 | `n` | Display name of the Mac, percent-encoded |
 
 ## Manual fallback

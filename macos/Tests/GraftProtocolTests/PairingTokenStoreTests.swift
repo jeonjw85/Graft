@@ -33,13 +33,27 @@ final class PairingTokenStoreTests: XCTestCase {
 
     func testSixthAttemptInsideWindowIsRejected() {
         var store = PairingTokenStore(maxAttempts: 5)
-        _ = store.issue(now: now)
+        let token = store.issue(now: now)
 
         for index in 0..<5 {
             XCTAssertFalse(store.attempt(token: "wrong-\(index)-value-here", now: now))
         }
-        XCTAssertFalse(store.attempt(token: "wrong-5-value-here", now: now))
+        XCTAssertFalse(store.attempt(token: token.value, now: now), "budget is exhausted")
         XCTAssertTrue(store.isRateLimited(now: now))
+    }
+
+    func testFifthAttemptWithTheCorrectTokenSucceeds() {
+        var store = PairingTokenStore(maxAttempts: 5)
+        let token = store.issue(now: now)
+
+        for index in 0..<4 {
+            XCTAssertFalse(store.attempt(token: "wrong-\(index)-value-here", now: now))
+        }
+
+        XCTAssertTrue(
+            store.attempt(token: token.value, now: now),
+            "the fifth attempt must still be allowed"
+        )
     }
 
     func testRateLimitWindowSlides() {

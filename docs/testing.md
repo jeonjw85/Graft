@@ -30,6 +30,7 @@ To drive it by hand:
 
 ```bash
 swift build --package-path macos --product graft-headless
+(cd android && ./gradlew :core:jar)          # tools/e2e links the core jar
 macos/.build/debug/graft-headless --port 47800 --identity-tag kr.jjw.graft.local --host 127.0.0.1
 # copy the printed PAIRING_URI, then:
 cd tools/e2e && ./gradlew run --args="--uri '<pairing-uri>'"

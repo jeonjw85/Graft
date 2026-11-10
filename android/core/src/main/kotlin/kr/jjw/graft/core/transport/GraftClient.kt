@@ -87,7 +87,10 @@ class GraftClient(
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                    val reason = if (t is javax.net.ssl.SSLException) {
+                    // Only a rejection by our own trust manager means the pin failed. Any other TLS
+                    // error (expired certificate, server refusing our certificate, a transient
+                    // alert) must stay retryable, or a user could never recover.
+                    val reason = if (trustManager.lastRejectionWasPin) {
                         CloseReason.PIN_MISMATCH
                     } else {
                         CloseReason.NETWORK
