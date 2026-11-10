@@ -24,6 +24,7 @@ final class GraftService: ObservableObject {
     private let identity: DeviceIdentity?
     private let pairingService: PairingService?
     private var server: TransportServer?
+    private var advertiser: BonjourAdvertiser?
     private var sessions: [ObjectIdentifier: ConnectionSession] = [:]
     private var heartbeatTimer: DispatchSourceTimer?
     private(set) var lastError: Error?
@@ -112,6 +113,17 @@ final class GraftService: ObservableObject {
 
         self.server = server
         menuState = MenuState(status: .idle, peerName: nil)
+
+        guard let assignedPort = server.port else { return }
+
+        // Advertise so a phone that already paired can reconnect without scanning again.
+        let discoverable = BonjourAdvertiser(
+            port: assignedPort,
+            fingerprint: identity.fingerprint,
+            deviceName: Host.current().localizedName ?? "Graft Mac"
+        )
+        try? discoverable.start()
+        advertiser = discoverable
     }
 
     func stop() {
@@ -121,6 +133,8 @@ final class GraftService: ObservableObject {
             session.tick(now: clock())
         }
         sessions.removeAll()
+        advertiser?.stop()
+        advertiser = nil
         server?.stop()
         server = nil
     }
