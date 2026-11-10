@@ -1,0 +1,22 @@
+{
+  "description": "Transfer state transitions shared by the Swift and Kotlin machines. Events carry the values in parentheses; the tests construct them literally.",
+  "transitions": [
+    { "from": "idle", "event": "offer", "to": "offered", "actions": [] },
+    { "from": "offered", "event": "accept", "offset": 0, "to": "receiving", "actions": [] },
+    { "from": "offered", "event": "accept", "offset": 1024, "to": "receiving", "actions": [{ "seekTo": 1024 }] },
+    { "from": "offered", "event": "reject", "to": "failed", "actions": [] },
+    { "from": "receiving", "event": "chunk", "offset": "confirmed", "length": 65536, "to": "receiving", "actions": [] },
+    { "from": "receiving", "event": "chunk", "offset": "mismatch", "length": 16, "to": "failed", "actions": ["abort"] },
+    { "from": "receiving", "event": "complete", "to": "verifying", "actions": ["computeHash"] },
+    { "from": "verifying", "event": "hashOk", "to": "completed", "actions": ["commitFile"] },
+    { "from": "verifying", "event": "hashMismatch", "to": "failed", "actions": ["deletePartial"] },
+    { "from": "receiving", "event": "stall", "to": "failed", "actions": ["abort"] },
+    { "from": "receiving", "event": "cancel", "to": "cancelled", "actions": ["deletePartial"] },
+    { "from": "offered", "event": "cancel", "to": "cancelled", "actions": [] }
+  ],
+  "notes": [
+    "offset 'confirmed' means the event offset equals the record's bytesConfirmed",
+    "offset 'mismatch' means the event offset differs from bytesConfirmed by any amount",
+    "a chunk that arrives in a phase other than receiving is ignored, not failed"
+  ]
+}
