@@ -17,6 +17,9 @@ final class GraftService: ObservableObject {
     @Published private(set) var peers: [PairedPeer] = []
     @Published private(set) var pairingURI: String?
     @Published private(set) var qrImage: NSImage?
+    @Published private(set) var transfers: [UInt32: TransferProgress] = [:]
+    @Published private(set) var transferFailure: String?
+    @Published private(set) var receiveDirectory: URL = GraftService.defaultReceiveDirectory()
 
     private let port: UInt16
     private let store: PeerStore
@@ -26,6 +29,8 @@ final class GraftService: ObservableObject {
     private var server: TransportServer?
     private var advertiser: BonjourAdvertiser?
     private var sessions: [ObjectIdentifier: ConnectionSession] = [:]
+    private var coordinators: [ObjectIdentifier: TransferCoordinator] = [:]
+    private var nextTransferId: UInt32 = 1
     private var heartbeatTimer: DispatchSourceTimer?
     private(set) var lastError: Error?
     private(set) var hasStarted = false
@@ -202,12 +207,33 @@ final class GraftService: ObservableObject {
         let key = ObjectIdentifier(connection)
         sessions[key] = session
 
+        let coordinator = TransferCoordinator(
+            directory: receiveDirectory,
+            isPaired: { [weak self] in
+                guard let self else { return false }
+                return self.peers.contains { $0.fingerprint == fingerprint }
+            },
+            sendControl: { [weak connection] envelope in try? connection?.send(envelope) },
+            sendBinary: { [weak connection] data in try? connection?.sendBinary(data) }
+        )
+        coordinators[key] = coordinator
+
         connection.receive { [weak self] envelope in
             Task { @MainActor in
                 guard let self, let session = self.sessions[key] else { return }
                 session.handle(envelope: envelope, now: self.clock())
+                self.coordinators[key]?.onControl(envelope)
+                self.syncTransfers()
                 self.publishState(for: session)
                 self.persistPairingIfNeeded()
+            }
+        }
+
+        connection.receiveBinary { [weak self] data in
+            Task { @MainActor in
+                guard let self else { return }
+                self.coordinators[key]?.onBinary(data)
+                self.syncTransfers()
             }
         }
 
@@ -264,6 +290,52 @@ final class GraftService: ObservableObject {
         peers = store.load()
         pairingURI = nil
         qrImage = nil
+    }
+
+    // MARK: - File transfer
+
+    @discardableResult
+    func sendFile(url: URL) -> Bool {
+        guard let coordinator = coordinators.values.first else {
+            transferFailure = "Connect a phone first"
+            return false
+        }
+        let id = nextTransferId
+        nextTransferId += 1
+        do {
+            try coordinator.offer(url: url, transferId: id)
+            syncTransfers()
+            return true
+        } catch {
+            transferFailure = "Could not read \(url.lastPathComponent)"
+            return false
+        }
+    }
+
+    private func syncTransfers() {
+        var merged: [UInt32: TransferProgress] = [:]
+        for coordinator in coordinators.values {
+            merged.merge(coordinator.progress) { current, _ in current }
+            if let failure = coordinator.failures.values.first {
+                transferFailure = Self.describe(failure)
+            }
+        }
+        transfers = merged
+    }
+
+    private static func describe(_ failure: TransferFailure) -> String {
+        switch failure {
+        case .unpairedPeer: return "The phone refused the file"
+        case .duplicateTransfer: return "That transfer is already running"
+        case .unsafeName: return "The file name is not safe to save"
+        case .wrongOffset: return "The transfer got out of sync"
+        case .hashMismatch: return "The file did not arrive intact"
+        }
+    }
+
+    static func defaultReceiveDirectory() -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Downloads/Graft", isDirectory: true)
     }
 
     // MARK: - Paths

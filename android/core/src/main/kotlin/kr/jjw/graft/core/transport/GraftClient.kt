@@ -117,6 +117,10 @@ class GraftClient(
         }
     }
 
+    /** Sends a binary WebSocket frame (file data). */
+    fun sendBinary(bytes: ByteArray): Boolean =
+        webSocket?.send(okio.ByteString.of(*bytes)) ?: false
+
     fun send(envelope: Envelope): Boolean {
         val text = MessageCodec.encode(envelope).toString(Charsets.UTF_8)
         return webSocket?.send(text) ?: false

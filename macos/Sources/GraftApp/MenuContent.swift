@@ -28,6 +28,11 @@ struct MenuContent: View {
 
             peerList
 
+            if service.menuState.isConnected {
+                Divider()
+                TransferProgressView(service: service)
+            }
+
             Divider()
 
             HStack {

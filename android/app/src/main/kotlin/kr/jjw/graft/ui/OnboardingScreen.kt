@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,7 +32,13 @@ class GraftActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    OnboardingScreen(OnboardingViewModel())
+                    Column {
+                        OnboardingScreen(OnboardingViewModel())
+                        TransferList(
+                            transfers = remember { mutableStateMapOf<UInt, kr.jjw.graft.files.TransferProgress>() },
+                            modifier = Modifier.padding(horizontal = 24.dp),
+                        )
+                    }
                 }
             }
         }

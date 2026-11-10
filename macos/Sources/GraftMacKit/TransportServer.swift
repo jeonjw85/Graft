@@ -136,6 +136,7 @@ public final class TransportConnection: @unchecked Sendable {
     private let queue: DispatchQueue
     private var isReady = false
     private var handlers: [(Envelope) -> Void] = []
+    private var binaryHandlers: [(Data) -> Void] = []
 
     var onClose: ((ObjectIdentifier) -> Void)?
     var onReady: (() -> Void)?
@@ -170,6 +171,19 @@ public final class TransportConnection: @unchecked Sendable {
         try send(envelope, completion: nil)
     }
 
+    /// Sends a binary WebSocket frame (file data).
+    public func sendBinary(_ data: Data, completion: (() -> Void)? = nil) throws {
+        guard isReady else { throw TransportError.notReady }
+        let metadata = NWProtocolWebSocket.Metadata(opcode: .binary)
+        let context = NWConnection.ContentContext(identifier: "binary", metadata: [metadata])
+        connection.send(
+            content: data,
+            contentContext: context,
+            isComplete: true,
+            completion: .contentProcessed { _ in completion?() }
+        )
+    }
+
     /// Sends a frame and calls `completion` after it is handed to the network stack.
     ///
     /// Callers that close right after sending must use this: cancelling immediately can drop the
@@ -189,6 +203,11 @@ public final class TransportConnection: @unchecked Sendable {
 
     public func receive(_ handler: @escaping (Envelope) -> Void) {
         handlers.append(handler)
+    }
+
+    /// Registers a handler for binary frames (file data).
+    public func receiveBinary(_ handler: @escaping (Data) -> Void) {
+        binaryHandlers.append(handler)
     }
 
     /// The authenticated peer's SPKI fingerprint, recorded during the TLS handshake.
@@ -230,11 +249,15 @@ public final class TransportConnection: @unchecked Sendable {
     }
 
     private func readLoop() {
-        connection.receiveMessage { [weak self] data, _, _, error in
+        connection.receiveMessage { [weak self] data, context, _, error in
             guard let self else { return }
-            if let data, !data.isEmpty, let envelope = try? MessageCodec.decode(data) {
-                for handler in self.handlers {
-                    handler(envelope)
+            if let data, !data.isEmpty {
+                let metadata = context?.protocolMetadata(definition: NWProtocolWebSocket.definition)
+                    as? NWProtocolWebSocket.Metadata
+                if metadata?.opcode == .binary {
+                    for handler in self.binaryHandlers { handler(data) }
+                } else if let envelope = try? MessageCodec.decode(data) {
+                    for handler in self.handlers { handler(envelope) }
                 }
             }
             if error != nil { return }
