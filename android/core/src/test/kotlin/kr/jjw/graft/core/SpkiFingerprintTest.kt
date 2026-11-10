@@ -55,6 +55,7 @@ class SpkiFingerprintTest {
 }
 
 internal fun String.hexToBytes(): ByteArray {
+    if (isEmpty()) return ByteArray(0)
     require(length % 2 == 0) { "hex string must have an even length" }
     return ByteArray(length / 2) { index ->
         substring(index * 2, index * 2 + 2).toInt(16).toByte()

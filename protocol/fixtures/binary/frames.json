@@ -1,0 +1,40 @@
+{
+  "description": "Binary transfer frames shared by the Swift and Kotlin codecs. All integers are big-endian.",
+  "frames": [
+    {
+      "name": "minimum",
+      "tid": 0,
+      "offset": 0,
+      "dataHex": "",
+      "encodedHex": "47460100000000000000000000000000"
+    },
+    {
+      "name": "one-byte",
+      "tid": 1,
+      "offset": 0,
+      "dataHex": "ff",
+      "encodedHex": "47460100000000010000000000000000ff"
+    },
+    {
+      "name": "max-values",
+      "tid": 4294967295,
+      "offset": 18446744073709551615,
+      "dataHex": "00",
+      "encodedHex": "47460100ffffffffffffffffffffffff00"
+    },
+    {
+      "name": "mid-offset",
+      "tid": 7,
+      "offset": 1073741824,
+      "dataHex": "deadbeef",
+      "encodedHex": "47460100000000070000000040000000deadbeef"
+    }
+  ],
+  "invalid": [
+    { "name": "short", "encodedHex": "47460100" },
+    { "name": "empty", "encodedHex": "" },
+    { "name": "bad-magic", "encodedHex": "58580100000000000000000000000000" },
+    { "name": "bad-version", "encodedHex": "47460200000000000000000000000000" },
+    { "name": "reserved-not-zero", "encodedHex": "47460101000000000000000000000000" }
+  ]
+}
