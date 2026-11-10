@@ -22,10 +22,10 @@ sealed interface ConnectionEvent {
     data object Connecting : ConnectionEvent
     data class Secure(val serverFingerprint: String) : ConnectionEvent
     data class Message(val envelope: Envelope) : ConnectionEvent
-    data class Closed(val reason: CloseReason) : ConnectionEvent
+    data class Closed(val reason: TransportCloseReason) : ConnectionEvent
 }
 
-enum class CloseReason {
+enum class TransportCloseReason {
     PIN_MISMATCH,
     NETWORK,
     NORMAL,
@@ -95,16 +95,16 @@ class GraftClient(
                     // error (expired certificate, server refusing our certificate, a transient
                     // alert) must stay retryable, or a user could never recover.
                     val reason = if (trustManager.lastRejectionWasPin) {
-                        CloseReason.PIN_MISMATCH
+                        TransportCloseReason.PIN_MISMATCH
                     } else {
-                        CloseReason.NETWORK
+                        TransportCloseReason.NETWORK
                     }
                     trySend(ConnectionEvent.Closed(reason))
                     shutdown()
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                    trySend(ConnectionEvent.Closed(CloseReason.NORMAL))
+                    trySend(ConnectionEvent.Closed(TransportCloseReason.NORMAL))
                     shutdown()
                 }
             }
