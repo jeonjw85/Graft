@@ -67,31 +67,28 @@ class ScanViewModelTest {
     }
 
     @Test
-    fun `six-digit code builds an offer with the default host`() {
+    fun `six-digit code is refused because it carries no certificate fingerprint`() {
+        // TLS pins the Mac by SPKI. A typed code has no fingerprint to pin, so accepting it would
+        // either fail silently at the TLS layer or, worse, invite trust-on-first-use. Refuse it
+        // with an explanation instead.
         val viewModel = ScanViewModel(defaultHost = "192.168.0.12")
         viewModel.onCodeEntered("042817", null)
 
-        val offer = assertNotNull(viewModel.state.offer)
-        assertEquals("042817", offer.token)
-        assertEquals("192.168.0.12", offer.host)
-        assertEquals(47800, offer.port)
+        assertNull(viewModel.state.offer)
+        assertEquals(
+            "The six-digit code needs the camera path for now. Scan the QR code instead.",
+            viewModel.state.error
+        )
+        assertTrue(viewModel.state.useManualCode)
     }
 
     @Test
-    fun `six-digit code without any host asks for the address`() {
+    fun `six-digit code without a host reports the missing address first`() {
         val viewModel = ScanViewModel()
         viewModel.onCodeEntered("042817", null)
 
         assertNull(viewModel.state.offer)
         assertEquals("Enter your Mac's IP address too", viewModel.state.error)
-    }
-
-    @Test
-    fun `explicit host overrides the default`() {
-        val viewModel = ScanViewModel(defaultHost = "10.0.0.1")
-        viewModel.onCodeEntered("042817", "10.0.0.9")
-
-        assertEquals("10.0.0.9", assertNotNull(viewModel.state.offer).host)
     }
 
     @Test

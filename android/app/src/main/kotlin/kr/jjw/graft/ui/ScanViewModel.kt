@@ -43,15 +43,11 @@ class ScanViewModel(private val defaultHost: String? = null) {
             targetHost.isNullOrBlank() ->
                 ScanState(error = "Enter your Mac's IP address too", useManualCode = true)
 
+            // TLS authenticates the Mac by its SPKI fingerprint. A typed code carries no
+            // fingerprint, so accepting it would either fail at the TLS layer with a confusing
+            // error or invite trust-on-first-use, which this project explicitly avoids.
             else -> ScanState(
-                offer = PairingOffer(
-                    version = 1,
-                    host = targetHost,
-                    port = DEFAULT_PORT,
-                    fingerprint = "",
-                    token = trimmed,
-                    name = "Mac",
-                ),
+                error = "The six-digit code needs the camera path for now. Scan the QR code instead.",
                 useManualCode = true,
             )
         }
@@ -65,7 +61,4 @@ class ScanViewModel(private val defaultHost: String? = null) {
         else -> "That pairing code is not valid"
     }
 
-    private companion object {
-        const val DEFAULT_PORT = 47800
-    }
 }

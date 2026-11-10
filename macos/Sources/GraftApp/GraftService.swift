@@ -30,6 +30,10 @@ final class GraftService: ObservableObject {
     private(set) var lastError: Error?
     private(set) var hasStarted = false
 
+    /// The peer accepted during this session, if any. Cleared when the user forgets a device so a
+    /// later frame cannot silently re-add it.
+    private(set) var pendingPairedPeer: (fingerprint: String, name: String)?
+
     init(port: UInt16 = 47800, storeURL: URL? = nil, clock: @escaping () -> Date = Date.init) {
         self.port = port
         self.clock = clock
@@ -175,6 +179,9 @@ final class GraftService: ObservableObject {
     func forgetPeer(fingerprint: String) {
         try? store.remove(fingerprint: fingerprint)
         peers = store.load()
+        if pendingPairedPeer?.fingerprint == fingerprint {
+            pendingPairedPeer = nil
+        }
     }
 
     // MARK: - Connections
@@ -244,6 +251,7 @@ final class GraftService: ObservableObject {
     /// Records the peer the moment pairing succeeds, so a restart remembers it.
     private func persistPairingIfNeeded() {
         guard let pairingService, let accepted = pairingService.lastPairedPeer else { return }
+        pendingPairedPeer = accepted
         guard !peers.contains(where: { $0.fingerprint == accepted.fingerprint }) else { return }
 
         let peer = PairedPeer(

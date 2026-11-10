@@ -63,6 +63,24 @@ final class GraftServiceTests: XCTestCase {
         XCTAssertEqual(service.menuState.status, .idle)
     }
 
+    func testForgetClearsThePendingPairingRecord() throws {
+        // persistPairingIfNeeded runs on every inbound frame. If forgetting a peer leaves the last
+        // accepted pairing in place, the next frame silently re-adds the device the user removed.
+        let url = temporaryStoreURL()
+        let store = PeerStore(url: url)
+        try store.add(PairedPeer(fingerprint: "fp", name: "Phone", platform: "android", pairedAtMillis: 1))
+
+        let service = GraftService(port: 47998, storeURL: url)
+        service.reloadPeers()
+        service.forgetPeer(fingerprint: "fp")
+
+        XCTAssertTrue(service.peers.isEmpty)
+        XCTAssertNil(
+            service.pendingPairedPeer,
+            "forgetting must clear the pending record so it cannot be written back"
+        )
+    }
+
     // MARK: - helpers
 
     private func temporaryStoreURL() -> URL {
