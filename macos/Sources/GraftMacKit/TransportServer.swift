@@ -14,6 +14,7 @@ public final class TransportServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "kr.jjw.graft.server")
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: TransportConnection] = [:]
+    private let queueKey = DispatchSpecificKey<Void>()
     public private(set) var port: UInt16?
 
     public var onConnection: ((TransportConnection) -> Void)?
@@ -25,6 +26,7 @@ public final class TransportServer: @unchecked Sendable {
     }
 
     public func start() throws {
+        queue.setSpecific(key: queueKey, value: ())
         let tlsOptions = NWProtocolTLS.Options()
         let securityOptions = tlsOptions.securityProtocolOptions
         guard let secIdentity = sec_identity_create(identity.identity) else {
@@ -100,15 +102,22 @@ public final class TransportServer: @unchecked Sendable {
     }
 
     public func stop() {
-        // connections is owned by self.queue; mutate it there so teardown cannot race a callback.
-        queue.sync {
-            listener?.cancel()
-            listener = nil
-            for connection in connections.values {
-                connection.close()
-            }
-            connections.removeAll()
+        // connections is owned by self.queue, so teardown must run there. Callbacks also run on
+        // that queue; dispatch_sync from inside one aborts the process, so detect reentrancy.
+        if DispatchQueue.getSpecific(key: queueKey) != nil {
+            teardown()
+        } else {
+            queue.sync { teardown() }
         }
+    }
+
+    private func teardown() {
+        listener?.cancel()
+        listener = nil
+        for connection in connections.values {
+            connection.close()
+        }
+        connections.removeAll()
     }
 }
 

@@ -5,9 +5,28 @@ import XCTest
 @testable import GraftMacKit
 @testable import GraftProtocol
 
-final class PeerAuthorizerTests: XCTestCase {
-    private let now = Date(timeIntervalSince1970: 1_762_752_000)
+private func freePort() -> UInt16 {
+    let socketFD = socket(AF_INET, SOCK_STREAM, 0)
+    defer { close(socketFD) }
+    var address = sockaddr_in()
+    address.sin_family = sa_family_t(AF_INET)
+    address.sin_addr.s_addr = inet_addr("127.0.0.1")
+    address.sin_port = 0
+    withUnsafePointer(to: &address) { pointer in
+        _ = pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+            bind(socketFD, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
+        }
+    }
+    var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+    withUnsafeMutablePointer(to: &address) { pointer in
+        _ = pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+            getsockname(socketFD, sockaddrPointer, &length)
+        }
+    }
+    return UInt16(bigEndian: address.sin_port)
+}
 
+final class PeerAuthorizerTests: XCTestCase {
     func testRejectsUnknownPeerByDefault() {
         let authorizer = PeerAuthorizer(allowed: { [] })
         XCTAssertFalse(authorizer.isAuthorized("unrelated-fingerprint"))
@@ -37,48 +56,31 @@ final class PeerAuthorizerTests: XCTestCase {
     }
 }
 
-private func freePort() -> UInt16 {
-    let socketFD = socket(AF_INET, SOCK_STREAM, 0)
-    defer { close(socketFD) }
-    var address = sockaddr_in()
-    address.sin_family = sa_family_t(AF_INET)
-    address.sin_addr.s_addr = inet_addr("127.0.0.1")
-    address.sin_port = 0
-    withUnsafePointer(to: &address) { pointer in
-        _ = pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-            bind(socketFD, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
-        }
-    }
-    var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-    withUnsafeMutablePointer(to: &address) { pointer in
-        _ = pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-            getsockname(socketFD, sockaddrPointer, &length)
-        }
-    }
-    return UInt16(bigEndian: address.sin_port)
-}
-
 final class TransportServerTests: XCTestCase {
-    func testPeerCanSendAndReceiveAHello() throws {
+    private func identities() throws -> (server: DeviceIdentity, peer: DeviceIdentity, tags: (String, String)) {
         let serverTag = "kr.jjw.graft.test.server.\(UUID().uuidString)"
-        let clientTag = "kr.jjw.graft.test.client.\(UUID().uuidString)"
-        let serverIdentity = try DeviceIdentity.loadOrCreate(tag: serverTag)
-        let clientIdentity = try DeviceIdentity.loadOrCreate(tag: clientTag)
+        let peerTag = "kr.jjw.graft.test.client.\(UUID().uuidString)"
+        return (
+            try DeviceIdentity.loadOrCreate(tag: serverTag),
+            try DeviceIdentity.loadOrCreate(tag: peerTag),
+            (serverTag, peerTag)
+        )
+    }
+
+    func testPeerCanSendAndReceiveAHello() throws {
+        let (serverIdentity, peerIdentity, tags) = try identities()
         defer {
-            DeviceIdentity.delete(tag: serverTag)
-            DeviceIdentity.delete(tag: clientTag)
+            DeviceIdentity.delete(tag: tags.0)
+            DeviceIdentity.delete(tag: tags.1)
         }
 
-        let authorizer = PeerAuthorizer(allowed: { [clientIdentity.fingerprint] })
+        let authorizer = PeerAuthorizer(allowed: { [peerIdentity.fingerprint] })
         let server = TransportServer(identity: serverIdentity, authorizer: authorizer, port: freePort())
 
-        let received = expectation(description: "server received hello")
-        var serverConnection: TransportConnection?
+        let received = expectation(description: "server received hello and replied")
         server.onConnection = { connection in
-            serverConnection = connection
             connection.receive { envelope in
                 XCTAssertEqual(envelope.type, "hello")
-                // Reply from the handler so the peer observes a frame produced by the server.
                 try? connection.send(Envelope(type: "hello.ok", payload: .object([:])))
                 received.fulfill()
             }
@@ -89,7 +91,7 @@ final class TransportServerTests: XCTestCase {
         let reply = expectation(description: "peer received hello.ok")
         let connected = expectation(description: "peer connected")
         let peer = try TransportPeer(
-            identity: clientIdentity,
+            identity: peerIdentity,
             host: "127.0.0.1",
             port: try XCTUnwrap(server.port),
             expectedServerFingerprint: serverIdentity.fingerprint
@@ -109,17 +111,13 @@ final class TransportServerTests: XCTestCase {
         }
 
         wait(for: [connected, received, reply], timeout: 10)
-        XCTAssertNotNil(serverConnection)
     }
 
     func testServerRejectsUnknownClientFingerprint() throws {
-        let serverTag = "kr.jjw.graft.test.server.\(UUID().uuidString)"
-        let strangerTag = "kr.jjw.graft.test.stranger.\(UUID().uuidString)"
-        let serverIdentity = try DeviceIdentity.loadOrCreate(tag: serverTag)
-        let strangerIdentity = try DeviceIdentity.loadOrCreate(tag: strangerTag)
+        let (serverIdentity, strangerIdentity, tags) = try identities()
         defer {
-            DeviceIdentity.delete(tag: serverTag)
-            DeviceIdentity.delete(tag: strangerTag)
+            DeviceIdentity.delete(tag: tags.0)
+            DeviceIdentity.delete(tag: tags.1)
         }
 
         let authorizer = PeerAuthorizer(allowed: { [] })
@@ -147,5 +145,36 @@ final class TransportServerTests: XCTestCase {
         }
 
         wait(for: [failed, accepted], timeout: 10)
+    }
+
+    func testStopFromInsideAConnectionCallbackDoesNotCrash() throws {
+        let (serverIdentity, peerIdentity, tags) = try identities()
+        defer {
+            DeviceIdentity.delete(tag: tags.0)
+            DeviceIdentity.delete(tag: tags.1)
+        }
+
+        let authorizer = PeerAuthorizer(allowed: { [peerIdentity.fingerprint] })
+        let server = TransportServer(identity: serverIdentity, authorizer: authorizer, port: freePort())
+
+        let stopped = expectation(description: "stop ran inside the callback without crashing")
+        server.onConnection = { _ in
+            // Callbacks run on the server queue; stop() must not dispatch_sync onto it.
+            server.stop()
+            stopped.fulfill()
+        }
+        try server.start()
+
+        let connected = expectation(description: "peer connected")
+        let peer = try TransportPeer(
+            identity: peerIdentity,
+            host: "127.0.0.1",
+            port: try XCTUnwrap(server.port),
+            expectedServerFingerprint: serverIdentity.fingerprint
+        )
+        peer.start { _ in connected.fulfill() }
+        defer { peer.close() }
+
+        wait(for: [connected, stopped], timeout: 10)
     }
 }

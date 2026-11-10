@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end check: starts the headless Mac server, pairs a real TLS peer over the wire, and
-# asserts that a second pairing with the same token fails.
+# asserts that replaying the pairing request is rejected with a protocol error.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
@@ -37,18 +37,30 @@ if [[ -z "$URI" ]]; then
 fi
 
 echo "==> pair"
-OUTPUT="$(tools/e2e/build/install/graft-e2e/bin/graft-e2e --uri "$URI" 2>&1)"
-echo "$OUTPUT"
-
-if ! grep -q HELLO_OK <<<"$OUTPUT"; then
+if ! OUTPUT="$(tools/e2e/build/install/graft-e2e/bin/graft-e2e --uri "$URI" 2>&1)"; then
+    echo "$OUTPUT"
     echo "FAIL: pairing did not complete"
     exit 1
 fi
+echo "$OUTPUT"
 
-echo "==> replay the same token on a second connection"
-if tools/e2e/build/install/graft-e2e/bin/graft-e2e --uri "$URI" >/dev/null 2>&1; then
-    echo "FAIL: a replayed pairing token was accepted"
+if ! grep -q 'REPLAY_REJECTED' <<<"$OUTPUT"; then
+    echo "FAIL: the replay check produced no verdict"
     exit 1
 fi
 
-echo "PASS: paired once, replay rejected"
+echo "==> replay the same token with a fresh identity"
+# A consumed token and a closed pairing window must refuse a second device. The client prints a
+# marker only on a definite refusal, so a crash or a dropped frame cannot pass this check.
+if ! OUTPUT="$(tools/e2e/build/install/graft-e2e/bin/graft-e2e --uri "$URI" --expect-refused 2>&1)"; then
+    echo "$OUTPUT"
+    echo "FAIL: the consumed token was accepted or produced no verdict"
+    exit 1
+fi
+if ! grep -q 'REFUSED' <<<"$OUTPUT"; then
+    echo "$OUTPUT"
+    echo "FAIL: the replay run produced no protocol verdict"
+    exit 1
+fi
+
+echo "PASS: paired once, replay refused"

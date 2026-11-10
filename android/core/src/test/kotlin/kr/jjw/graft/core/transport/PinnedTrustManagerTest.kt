@@ -63,6 +63,20 @@ class PinnedTrustManagerTest {
     }
 
     @Test
+    fun `begin attempt clears a stale rejection`() {
+        val certificate = HeldCertificate.Builder().commonName("stranger").build().certificate
+        val manager = PinnedTrustManager { emptySet() }
+
+        assertThrows(CertificateException::class.java) {
+            manager.checkServerTrusted(arrayOf(certificate), "ECDHE_ECDSA")
+        }
+        assertTrue(manager.lastRejectionWasPin)
+
+        manager.beginAttempt()
+        assertFalse(manager.lastRejectionWasPin)
+    }
+
+    @Test
     fun `checks client chains too`() {
         val certificate = HeldCertificate.Builder().commonName("phone").build().certificate
         val manager = PinnedTrustManager { emptySet() }

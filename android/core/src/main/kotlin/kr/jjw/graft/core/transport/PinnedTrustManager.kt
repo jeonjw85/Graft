@@ -20,9 +20,20 @@ class PinnedTrustManager(
     @Volatile
     var onServerVerified: ((String) -> Unit)? = null
 
-    /** Set when this manager itself rejected a chain, so callers can tell pin failures apart. */
+    /**
+     * Set when this manager itself rejected a chain, so callers can tell pin failures apart.
+     *
+     * This is read immediately after the failing handshake by [GraftClient]. A shared flag would be
+     * wrong across concurrent connections, so [GraftClient] creates one manager per connection and
+     * this value never outlives that attempt.
+     */
     @Volatile
     var lastRejectionWasPin: Boolean = false
+
+    /** Clears per-attempt state before a new handshake starts on this manager. */
+    fun beginAttempt() {
+        lastRejectionWasPin = false
+    }
 
     override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
         try {

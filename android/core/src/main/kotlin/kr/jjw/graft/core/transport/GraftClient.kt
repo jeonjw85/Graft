@@ -52,6 +52,10 @@ class GraftClient(
     fun connect(): Flow<ConnectionEvent> = callbackFlow {
         trySend(ConnectionEvent.Connecting)
 
+        // Each attempt gets a clean rejection record; a stale flag from an earlier connection must
+        // not turn a transient network error into a permanent "re-pair" instruction.
+        trustManager.beginAttempt()
+
         trustManager.onServerVerified = { lastVerifiedServerFingerprint.set(it) }
 
         val okHttp = OkHttpClient.Builder()

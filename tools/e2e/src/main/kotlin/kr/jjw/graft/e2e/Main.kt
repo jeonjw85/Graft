@@ -29,10 +29,12 @@ import kotlinx.serialization.json.jsonPrimitive
  */
 fun main(args: Array<String>) {
     var uri: String? = null
+    var expectRefused = false
     var index = 0
     while (index < args.size) {
         when (args[index]) {
             "--uri" -> uri = args.getOrNull(++index)
+            "--expect-refused" -> expectRefused = true
             else -> Unit
         }
         index++
@@ -44,6 +46,9 @@ fun main(args: Array<String>) {
     }
 
     val offer = PairingUri.parse(uri)
+    if (expectRefused) {
+        exitProcess(if (refusedPairing(offer)) 0 else 1)
+    }
     val backend = InMemoryKeyStoreBackend()
     val identity = DeviceIdentity.loadOrCreate(backend, "e2e")
     val trust = PinnedTrustManager { setOf(offer.fingerprint) }
@@ -154,21 +159,100 @@ fun main(args: Array<String>) {
 
     // Replay the same token on a fresh connection using the SAME identity. A new identity would be
     // rejected at the TLS layer, which would prove nothing about token reuse.
-    val replayRejected = replayPairing(offer, identity)
-    if (!replayRejected) {
-        System.err.println("FAILED: the server accepted a replayed pairing token")
-        exitProcess(1)
+    when (val replay = replayPairing(offer, identity)) {
+        ReplayOutcome.REJECTED -> println("REPLAY_REJECTED")
+        ReplayOutcome.ACCEPTED -> {
+            System.err.println("FAILED: the server accepted a replayed pairing request")
+            exitProcess(1)
+        }
+        ReplayOutcome.NO_VERDICT -> {
+            System.err.println("FAILED: no verdict on the replayed request; the server closed without a frame")
+            exitProcess(1)
+        }
     }
-    println("REPLAY_REJECTED")
 
     // Gradle's non-daemon threads keep the JVM alive for a minute; exit explicitly.
     exitProcess(0)
 }
 
+private enum class ReplayOutcome { REJECTED, ACCEPTED, NO_VERDICT }
+
+/**
+ * Connects with a fresh identity and asserts the server refuses to complete pairing.
+ *
+ * Used after a successful pairing: the token is consumed and the pairing window is closed, so a
+ * second device must never receive `pair.ok`. Prints a marker only on a definite refusal so a
+ * crash cannot be mistaken for success.
+ */
+private fun refusedPairing(offer: kr.jjw.graft.core.PairingOffer): Boolean {
+    val identity = DeviceIdentity.loadOrCreate(InMemoryKeyStoreBackend(), "refused")
+    val client = GraftClient(
+        baseUrl = "wss://${offer.host}:${offer.port}/graft",
+        trustManager = PinnedTrustManager { setOf(offer.fingerprint) },
+        keyManager = IdentityKeyManager(
+            alias = "refused",
+            privateKey = identity.privateKey,
+            chain = arrayOf(identity.certificate),
+        ),
+    )
+    val latch = CountDownLatch(1)
+    val sawPairOk = java.util.concurrent.atomic.AtomicBoolean(false)
+    val sawRefusal = java.util.concurrent.atomic.AtomicBoolean(false)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val job = scope.launch {
+        runCatching {
+            withTimeout(20_000) {
+                client.connect().collect { event ->
+                    when (event) {
+                        is ConnectionEvent.Secure -> client.send(
+                            Envelope.create(
+                                type = "pair.request",
+                                payload = buildJsonObject {
+                                    put("token", offer.token)
+                                    put("deviceId", "refused-device")
+                                    put("name", "Refused Peer")
+                                    put("platform", "android")
+                                }
+                            )
+                        )
+
+                        is ConnectionEvent.Message -> {
+                            if (event.envelope.type == "pair.ok") sawPairOk.set(true)
+                            if (event.envelope.type == "error") sawRefusal.set(true)
+                            latch.countDown()
+                        }
+
+                        is ConnectionEvent.Closed -> latch.countDown()
+                        ConnectionEvent.Connecting -> Unit
+                    }
+                }
+            }
+        }
+    }
+    val finished = latch.await(25, TimeUnit.SECONDS)
+    job.cancel()
+    client.close()
+
+    return when {
+        sawPairOk.get() -> {
+            System.err.println("FAILED: a second device paired with a consumed token")
+            false
+        }
+        sawRefusal.get() || finished -> {
+            println("REFUSED")
+            true
+        }
+        else -> {
+            System.err.println("FAILED: no verdict on the second pairing attempt")
+            false
+        }
+    }
+}
+
 private fun replayPairing(
     offer: kr.jjw.graft.core.PairingOffer,
     identity: DeviceIdentity,
-): Boolean {
+): ReplayOutcome {
     val client = GraftClient(
         baseUrl = "wss://${offer.host}:${offer.port}/graft",
         trustManager = PinnedTrustManager { setOf(offer.fingerprint) },
@@ -179,7 +263,9 @@ private fun replayPairing(
         ),
     )
     val latch = CountDownLatch(1)
-    val rejected = java.util.concurrent.atomic.AtomicBoolean(false)
+    val sawUnpairedError = java.util.concurrent.atomic.AtomicBoolean(false)
+    val sawPairOk = java.util.concurrent.atomic.AtomicBoolean(false)
+    val sawAnyFrame = java.util.concurrent.atomic.AtomicBoolean(false)
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val job = scope.launch {
         runCatching {
@@ -199,12 +285,14 @@ private fun replayPairing(
                         )
 
                         is ConnectionEvent.Message -> {
-                            val payload = event.envelope.payload.jsonObject
-                            val code = payload["code"]?.jsonPrimitive?.content
+                            sawAnyFrame.set(true)
+                            val code = event.envelope.payload.jsonObject["code"]?.jsonPrimitive?.content
                             if (event.envelope.type == "error" && code == "unpaired") {
-                                rejected.set(true)
+                                sawUnpairedError.set(true)
                             }
-                            if (event.envelope.type == "pair.ok") rejected.set(false)
+                            if (event.envelope.type == "pair.ok") {
+                                sawPairOk.set(true)
+                            }
                             latch.countDown()
                         }
 
@@ -219,5 +307,11 @@ private fun replayPairing(
     val finished = latch.await(25, TimeUnit.SECONDS)
     job.cancel()
     client.close()
-    return finished && rejected.get()
+
+    return when {
+        sawPairOk.get() -> ReplayOutcome.ACCEPTED
+        sawUnpairedError.get() -> ReplayOutcome.REJECTED
+        // A close with no frame is not proof of rejection; it could be a crash or a dropped reply.
+        else -> ReplayOutcome.NO_VERDICT
+    }
 }
