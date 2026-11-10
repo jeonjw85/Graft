@@ -1,0 +1,60 @@
+name: Graft
+options:
+  bundleIdPrefix: kr.jjw
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+packages:
+  Graft:
+    path: .
+
+targets:
+  Graft:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/GraftApp
+        excludes:
+          - Info.plist
+    dependencies:
+      - package: Graft
+        product: GraftMacKit
+      - package: Graft
+        product: GraftProtocol
+    info:
+      path: Sources/GraftApp/Info.plist
+      properties:
+        CFBundleName: Graft
+        CFBundleDisplayName: Graft
+        LSMinimumSystemVersion: "13.0"
+        LSUIElement: true
+        NSLocalNetworkUsageDescription: Graft connects to your phone on this network.
+        NSBonjourServices:
+          - _graft._tcp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kr.jjw.graft.mac
+        PRODUCT_MODULE_NAME: GraftApp
+        SWIFT_VERSION: "6.0"
+
+  GraftAppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/GraftAppTests
+    dependencies:
+      - target: Graft
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+
+schemes:
+  Graft:
+    build:
+      targets:
+        Graft: all
+        GraftAppTests: [test]
+    test:
+      targets:
+        - GraftAppTests
