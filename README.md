@@ -16,7 +16,7 @@ An open-source tool that connects a Mac and an Android phone over the same Wi-Fi
 
 Graft does not send Mac notifications to Android, because macOS has no public API for reading other apps' notifications. See the [threat model](docs/threat-model.md) for details.
 
-Current state: the protocol, both codecs, and the pairing transport are implemented and tested. The macOS and Android apps are next, so there is nothing to install yet.
+Current state: the protocol, both codecs, the pairing transport, and the app shells are implemented and tested. File transfer, notifications, and an automatic reconnect in the Android foreground service are not built yet.
 
 ## Requirements
 
@@ -26,7 +26,27 @@ Current state: the protocol, both codecs, and the pairing transport are implemen
 
 ## Installation
 
-There is no release yet. DMG and APK builds will be published on GitHub Releases.
+There is no release yet. Both apps build from source; see below.
+
+### Build the macOS app
+
+```bash
+xcodegen generate --spec macos/project.yml
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcodebuild build -project macos/Graft.xcodeproj -scheme Graft \
+  -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
+```
+
+The app appears in the menu bar. On first launch macOS asks for local network access; pairing needs
+it.
+
+### Build the Android app
+
+```bash
+cd android && ./gradlew :app:assembleDebug
+```
+
+Install the APK from `android/app/build/outputs/apk/debug/` with `adb install -r`.
 
 ## Permissions and privacy
 

@@ -15,7 +15,7 @@
 - [x] Swift and Kotlin codecs with 16 shared fixtures
 - [x] Three CI workflows (protocol, macOS, Android)
 - [x] TLS 1.3 transport, QR pairing, and an end-to-end pairing test
-- [ ] macOS menu bar app, Android Compose app, onboarding
+- [x] macOS menu bar app, Android Compose app, onboarding
 
 ## Candidates for v0.2 and later
 

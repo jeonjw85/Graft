@@ -2,7 +2,7 @@
 
 Graft requests only the permissions its features need. This document explains why each one is required and what breaks if it is denied.
 
-> Status: draft. It will be updated alongside the app implementation.
+> Status: onboarding screens implement these prompts. Denials are handled as described below; the app never crashes on a denied permission.
 
 | Platform | Permission | Why it is needed | If denied |
 |---|---|---|---|
