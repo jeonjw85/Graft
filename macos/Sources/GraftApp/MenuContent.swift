@@ -5,6 +5,10 @@ struct MenuContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            Color.clear
+                .frame(height: 0)
+                .onAppear { GraftLauncher.shared.startIfNeeded() }
+
             header
 
             if let error = service.menuState.errorMessage {

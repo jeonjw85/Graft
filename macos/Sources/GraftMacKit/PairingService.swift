@@ -11,6 +11,8 @@ public final class PairingService: @unchecked Sendable {
         static let paired = "paired"
     }
 
+    /// The peer from the most recently accepted pair.request, so the app can persist its name.
+    public private(set) var lastPairedPeer: (fingerprint: String, name: String)?
     private var tokens: PairingTokenStore
     private let lock = NSLock()
     private var pairedFingerprints: Set<String>
@@ -104,10 +106,13 @@ public final class PairingService: @unchecked Sendable {
             return ([errorReply(to: envelope, code: "bad_payload", message: "token required")], true)
         }
 
+        let peerName = envelope.payload.objectValue?["name"]?.stringValue ?? "Phone"
+
         lock.lock()
         let accepted = tokens.attempt(token: token, now: now)
         if accepted {
             pairedFingerprints.insert(peerFingerprint)
+            lastPairedPeer = (fingerprint: peerFingerprint, name: peerName)
         }
         lock.unlock()
 

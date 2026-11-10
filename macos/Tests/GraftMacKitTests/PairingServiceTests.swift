@@ -127,6 +127,29 @@ final class PairingServiceTests: XCTestCase {
         XCTAssertFalse(service.allowedFingerprints.contains(phone))
     }
 
+    func testLastPairedPeerCarriesTheNameFromThePayload() throws {
+        let service = try service()
+        XCTAssertNil(service.lastPairedPeer, "nothing paired yet")
+
+        let issued = service.beginPairing(now: now, host: "127.0.0.1", port: 47800, deviceName: "Mac")
+        _ = service.handle(
+            envelope: Envelope(
+                type: "pair.request",
+                payload: .object([
+                    "token": .string(issued.token),
+                    "deviceId": .string("android-1"),
+                    "name": .string("Galaxy S24"),
+                    "platform": .string("android")
+                ])
+            ),
+            peerFingerprint: phone,
+            now: now
+        )
+
+        XCTAssertEqual(service.lastPairedPeer?.fingerprint, phone)
+        XCTAssertEqual(service.lastPairedPeer?.name, "Galaxy S24")
+    }
+
     func testFingerprintFromAnotherPeerIsNeverAccepted() throws {
         let service = try service(paired: [phone])
 
