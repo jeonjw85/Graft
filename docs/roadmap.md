@@ -3,7 +3,7 @@
 | Milestone | Scope | Done when | Status |
 |---|---|---|---|
 | M0 Foundation | Repository, protocol v1, Swift and Kotlin codecs, CI, transport and pairing, app shell | Both apps pair on real devices and keep the connection alive | In progress |
-| M1 Files | Bidirectional file transfer, resume, hash verification | A 1 GB transfer interrupted midway resumes and completes | Planned |
+| M1 Files | Bidirectional file transfer, resume, hash verification | A 1 GB transfer interrupted midway resumes and completes | In progress |
 | M2 Clipboard | Mac -> Android automatic, Android -> Mac on demand | Korean text and emoji survive a round trip | Planned |
 | M3 Notifications | Android -> Mac notifications, per-app allow list | Shown within one second, sensitive apps excluded by default | Planned |
 | M4 Release | DMG and APK, installation docs, v0.1.0 | Signed artifacts and installation instructions | Planned |

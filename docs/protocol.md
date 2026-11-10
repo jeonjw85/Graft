@@ -141,7 +141,23 @@ File data is sent as WebSocket binary frames. The header is 16 bytes, big-endian
 | 8 | 8 | Offset within the file (uint64) |
 | 16 | N | Data (up to 64 KiB) |
 
-If the magic or version does not match, the frame is dropped and the receiver sends `error{code:"bad_payload"}`.
+If the magic, version, or reserved byte does not match, the frame is dropped and the receiver sends `error{code:"bad_payload"}`. A payload larger than 64 KiB is rejected the same way.
+
+### 3.1 Transfer rules
+
+- A chunk is accepted only when its `offset` equals the bytes already written for that `tid`. Any other offset fails the transfer, because writing at the wrong place corrupts the file while leaving the right length.
+- The receiver writes to `name.part` and renames it only after the SHA-256 of the bytes on disk matches `file.complete.sha256`.
+- `file.accept.offset` requests a resume point. The receiver may answer with a lower offset if its partial file is missing or the wrong size, and the sender restarts from there.
+- A transfer with no chunk for 30 seconds fails and the partial file is removed.
+
+### 3.2 Where files land
+
+| Platform | Directory | Collision |
+|---|---|---|
+| macOS | `~/Downloads/Graft` | `name (2).ext` |
+| Android | `Download/Graft` | `name (2).ext` |
+
+A name containing a path separator, a NUL, or a control character is refused outright.
 
 ## 4. Error codes
 

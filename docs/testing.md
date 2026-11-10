@@ -54,6 +54,18 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n kr.jjw.graft/.ui.GraftActivity
 ```
 
+## File transfer
+
+```bash
+# headless sender: offers the file once a peer is ready
+swift build --package-path macos --product graft-headless
+macos/.build/debug/graft-headless --port 47950 --identity-tag test \
+  --send /tmp/sample.bin --receive-dir /tmp/graft-in
+```
+
+Pair a phone with the printed URI. The Mac offers the file and the phone auto-accepts because it
+is a paired peer. Both sides verify SHA-256 before the file is committed.
+
 ## Manual test matrix
 
 | Area | Values |
@@ -81,6 +93,10 @@ adb shell am start -n kr.jjw.graft/.ui.GraftActivity
 - [ ] Restarting the Mac app keeps the peer listed and reconnects without a new scan.
 - [ ] The Android app shows the onboarding screen and blocks the Done step until notification access is granted.
 - [ ] Denying the camera permission falls back to the six-digit code form.
+- [ ] Sending a 100 MB file completes and the SHA-256 matches on both sides.
+- [ ] Killing the receiver mid-transfer leaves `name.part` and no final file.
+- [ ] A file named `../../evil.sh` is refused with no file written.
+- [ ] A hash mismatch leaves no file behind.
 
 ## Before a release
 

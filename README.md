@@ -8,7 +8,7 @@ An open-source tool that connects a Mac and an Android phone over the same Wi-Fi
 
 | Feature | Direction | Status |
 |---|---|---|
-| File transfer (resume, hash verification) | Mac <-> Android | Planned |
+| File transfer (resume, hash verification) | Mac <-> Android | Working in dev builds |
 | Clipboard text sharing | Mac -> Android (automatic) | Planned |
 | Clipboard text sharing | Android -> Mac (share sheet, Quick Settings tile) | Planned |
 | Notification display | Android -> Mac | Planned |
@@ -16,7 +16,7 @@ An open-source tool that connects a Mac and an Android phone over the same Wi-Fi
 
 Graft does not send Mac notifications to Android, because macOS has no public API for reading other apps' notifications. See the [threat model](docs/threat-model.md) for details.
 
-Current state: the protocol, both codecs, the pairing transport, and the app shells are implemented and tested. File transfer, notifications, and an automatic reconnect in the Android foreground service are not built yet.
+Current state: the protocol, both codecs, the pairing transport, the app shells, and file transfer are implemented and tested. Notifications, clipboard UI wiring, and the Android foreground service are not built yet.
 
 ## Requirements
 
