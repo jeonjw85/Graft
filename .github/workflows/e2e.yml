@@ -32,5 +32,9 @@ jobs:
           path: macos/.build
           key: ${{ runner.os }}-swiftpm-${{ hashFiles('macos/Package.swift') }}
 
+      - name: Ensure the login keychain is unlocked
+        run: |
+          security unlock-keychain -p "" ~/Library/Keychains/login.keychain-db || true
+
       - name: Run transport and pairing end-to-end test
         run: ./protocol/tools/e2e-pairing.sh
