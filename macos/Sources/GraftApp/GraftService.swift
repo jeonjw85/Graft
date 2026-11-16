@@ -106,12 +106,7 @@ final class GraftService: ObservableObject {
     }
 
     var statusColor: Color {
-        switch menuState.status {
-        case .connected: return .green
-        case .failed: return .red
-        case .pairing, .searching: return .orange
-        case .idle: return .secondary
-        }
+        Palette.color(for: Palette.tone(for: menuState.status))
     }
 
     /// The six-digit fallback code, extracted from the pairing URI.

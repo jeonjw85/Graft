@@ -25,6 +25,8 @@ struct GraftApp: App {
 /// app idle until the user clicked the icon — the phone would never connect.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Dark only by design; the menu bar icon keeps system colouring.
+        NSApp.appearance = NSAppearance(named: .darkAqua)
         GraftLauncher.shared.startIfNeeded()
     }
 }
