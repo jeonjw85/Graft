@@ -59,7 +59,7 @@ fun MainScaffold(paired: Boolean, onForget: () -> Unit) {
                 onForget = onForget,
                 modifier = content,
             )
-            AppTab.Files -> FilesPlaceholder(modifier = content)
+            AppTab.Files -> FilesScreen(modifier = content)
             AppTab.Alerts -> AlertsPlaceholder(modifier = content)
         }
     }
