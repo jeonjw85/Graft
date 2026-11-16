@@ -149,6 +149,27 @@ screen and confirm the Mac stays connected. Grant notification access in system 
 app on the notification screen, and confirm its alerts appear in the Mac menu with the app name as
 the title.
 
+## macOS UI test
+
+`macos/Tests/GraftUITests` drives the real menu bar app: it opens the popover, clicks **Pair a
+phone**, checks the pairing window appears, closes it, and verifies the popover returns to
+"Not connected" (which proves the offer was revoked). It lives in its own scheme because macOS UI
+automation needs a one-time permission that a terminal cannot grant.
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcodebuild test -project macos/Graft.xcodeproj -scheme GraftUITests \
+  -destination 'platform=macOS' \
+  CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES
+```
+
+The ad-hoc signing flags are required: an unsigned runner is killed before it connects. If the run
+fails with `Timed out while enabling automation mode`, allow the terminal or Xcode under System
+Settings > Privacy & Security > Accessibility (or Automation), then run it again. The default
+`Graft` scheme excludes this test so unit tests stay runnable everywhere.
+
+Verified 2026-11-17 on macOS 27.2: 1 test, 18s, passed twice.
+
 ## Before a release
 
 - [ ] All automated tests pass
