@@ -18,6 +18,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
+import kr.jjw.graft.service.ConnectionRepository
+import kr.jjw.graft.service.ConnectionService
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -130,9 +135,29 @@ fun OnboardingScreen(viewModel: OnboardingViewModel) {
             }
 
             OnboardingStep.Done -> {
+                val context = LocalContext.current
+                val connection by ConnectionRepository.state.collectAsState()
+
                 Text("Ready", style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(12.dp))
-                Text("Graft will keep the connection open while it runs.")
+                Text(
+                    when (val status = connection.status) {
+                        is kr.jjw.graft.service.ConnectionStatus.Connected ->
+                            "Connected to ${connection.peerName ?: "your Mac"}"
+                        is kr.jjw.graft.service.ConnectionStatus.Connecting ->
+                            connection.lastError ?: "Connecting…"
+                        is kr.jjw.graft.service.ConnectionStatus.Failed -> status.message
+                        kr.jjw.graft.service.ConnectionStatus.Idle -> "Not connected"
+                    }
+                )
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = { ConnectionService.start(context) }) {
+                    Text("Keep connected in the background")
+                }
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = { ConnectionService.stop(context) }) {
+                    Text("Disconnect")
+                }
             }
         }
 
