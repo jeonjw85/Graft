@@ -195,6 +195,8 @@ class ConnectionService : Service() {
         }
 
         sessionClient.close()
+        client = null
+        coordinator = null
         // A flow that ends without a close event still means the socket is gone.
         if (!closed) outcome = Outcome.RETRY
         return outcome

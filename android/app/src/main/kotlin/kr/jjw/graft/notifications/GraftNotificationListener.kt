@@ -18,6 +18,19 @@ class GraftNotificationListener : NotificationListenerService() {
         )
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        // The listener runs in its own process and may start before the settings screen has ever
+        // been opened, so it loads the saved allow list itself. Without this the cache stays empty
+        // and nothing is ever forwarded.
+        NotificationAllowList.refresh(applicationContext)
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        NotificationAllowList.refresh(applicationContext)
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val extras = sbn.notification.extras
         val candidate = PostedNotification(

@@ -22,12 +22,30 @@ object NotificationAllowList {
 
     fun cached(): Set<String> = cache
 
+    /**
+     * Test seam: the real load path reads DataStore and needs a Context, which unit tests do not
+     * have. Production code never calls this.
+     */
+    internal fun seedForTest(packages: Set<String>) {
+        cache = packages
+    }
+
+    /**
+     * Loads the saved list into the cache the listener reads.
+     *
+     * Uses a plain thread rather than `runBlocking` so a listener callback is never blocked on the
+     * DataStore's own dispatcher, which can deadlock when called from the main thread.
+     */
     fun refresh(context: Context) {
-        cache = runBlocking {
-            runCatching {
-                context.allowListStore.data.first()[KEY] ?: emptySet()
+        val appContext = context.applicationContext
+        Thread {
+            val loaded = runCatching {
+                kotlinx.coroutines.runBlocking {
+                    appContext.allowListStore.data.first()[KEY] ?: emptySet()
+                }
             }.getOrDefault(emptySet())
-        }
+            cache = loaded
+        }.start()
     }
 
     suspend fun add(context: Context, packageName: String) {
