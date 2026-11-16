@@ -329,8 +329,12 @@ class ConnectionService : Service() {
                         pairedAtMillis = System.currentTimeMillis(),
                     )
                 )
-                // Drop the prefix so the next attempt pins the full value.
-                getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove("prefix").apply()
+                // Record the full pin so the next launch opens the main screen and connects
+                // with the same fingerprint QR pairing would have stored.
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putString("fingerprint", decision.fingerprint)
+                    .remove("prefix")
+                    .apply()
                 ConnectionRepository.onPeerPaired(offer.name)
             }
 
@@ -414,6 +418,26 @@ class ConnectionService : Service() {
 
         @Volatile
         private var instance: ConnectionService? = null
+
+        /** True when a peer fingerprint is pinned, from either pairing path. */
+        fun isPaired(context: Context): Boolean =
+            context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                .getString("fingerprint", null)
+                ?.isNotEmpty() == true
+
+        /** Drops the pairing and stops the service, so the app returns to onboarding. */
+        fun forget(context: Context) {
+            context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                .edit()
+                .remove("host")
+                .remove("port")
+                .remove("fingerprint")
+                .remove("prefix")
+                .remove("token")
+                .apply()
+            File(context.filesDir, "peers.json").delete()
+            stop(context)
+        }
 
         /** Stores a scanned offer so the service connects with the QR code's pinned fingerprint. */
         fun savePairingOffer(context: Context, offer: PairingOffer) {
