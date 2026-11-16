@@ -5,8 +5,10 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.tls.HandshakeCertificates
 import okhttp3.tls.HeldCertificate
 import mockwebserver3.MockResponse
@@ -94,6 +96,28 @@ class GraftClientTest {
     }
 
     @Test
+    fun `the event flow completes after a failed connection`() = runBlocking {
+        // A port that nothing listens on: the handshake fails, the flow must finish, and the
+        // reconnect loop must be free to try again.
+        val dead = MockWebServer()
+        dead.start()
+        val url = dead.url("/graft").toString().replace("http://", "wss://")
+        dead.close()
+
+        val trust = PinnedTrustManager { setOf("unused") }
+        val keys = IdentityKeyManager(
+            alias = "graft",
+            privateKey = clientCertificate.keyPair.private,
+            chain = arrayOf(clientCertificate.certificate),
+        )
+        val events = withTimeout(15_000) {
+            GraftClient(url, trust, keys).connect().toList()
+        }
+
+        assertTrue(events.any { it is ConnectionEvent.Closed }, "events: $events")
+    }
+
+    @Test
     fun `rejects a server certificate that is not pinned`() = runBlocking {
         val client = clientWithUnrelatedPin()
 
@@ -126,7 +150,10 @@ class GraftClientTest {
         return GraftClient(url, trust, keys)
     }
 
-    private fun clientAccepting(expected: HeldCertificate): GraftClient {
+    private fun clientAccepting(
+        expected: HeldCertificate,
+        base: MockWebServer = server,
+    ): GraftClient {
         val fingerprint = PinnedTrustManager.fingerprintOf(expected.certificate)
         val trust = PinnedTrustManager { setOf(fingerprint) }
         val keys = IdentityKeyManager(
@@ -134,7 +161,7 @@ class GraftClientTest {
             privateKey = clientCertificate.keyPair.private,
             chain = arrayOf(clientCertificate.certificate),
         )
-        val url = server.url("/graft").toString().replace("http://", "wss://")
+        val url = base.url("/graft").toString().replace("http://", "wss://")
         return GraftClient(url, trust, keys)
     }
 }

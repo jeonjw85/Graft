@@ -51,6 +51,9 @@ class GraftClient(
     internal val lastVerifiedServerFingerprint = java.util.concurrent.atomic.AtomicReference<String?>(null)
 
     fun connect(): Flow<ConnectionEvent> = callbackFlow {
+        // Completing the flow is what lets the caller's reconnect loop continue; a socket callback
+        // alone is not enough, because a callbackFlow stays open until its channel closes.
+        val producer = this
         trySend(ConnectionEvent.Connecting)
 
         // Each attempt gets a clean rejection record; a stale flag from an earlier connection must
@@ -106,11 +109,13 @@ class GraftClient(
                     }
                     trySend(ConnectionEvent.Closed(reason))
                     shutdown()
+                    producer.close()
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                     trySend(ConnectionEvent.Closed(TransportCloseReason.NORMAL))
                     shutdown()
+                    producer.close()
                 }
             }
         )

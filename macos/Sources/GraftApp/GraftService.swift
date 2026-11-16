@@ -42,6 +42,7 @@ final class GraftService: ObservableObject {
     private let pairingService: PairingService?
     private var server: TransportServer?
     private var advertiser: BonjourAdvertiser?
+    private var wakeObserver: NSObjectProtocol?
     private var sessions: [ObjectIdentifier: ConnectionSession] = [:]
     private let coordinators = CoordinatorPool()
     private var nextTransferId: UInt32 = 1
@@ -200,18 +201,41 @@ final class GraftService: ObservableObject {
         menuState = MenuState(status: .idle, peerName: nil)
 
         guard let assignedPort = server.port else { return }
+        startAdvertising(port: assignedPort, fingerprint: identity.fingerprint)
 
-        // Advertise so a phone that already paired can reconnect without scanning again.
+        // After sleep, Bonjour registrations can go stale; re-publish so the phone can find us
+        // again by fingerprint instead of falling back to a possibly changed IP.
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshAdvertising()
+        }
+    }
+
+    private func startAdvertising(port: UInt16, fingerprint: String) {
         let discoverable = BonjourAdvertiser(
-            port: assignedPort,
-            fingerprint: identity.fingerprint,
+            port: port,
+            fingerprint: fingerprint,
             deviceName: Host.current().localizedName ?? "Graft Mac"
         )
         try? discoverable.start()
         advertiser = discoverable
     }
 
+    private func refreshAdvertising() {
+        guard let port = server?.port, let fingerprint = identity?.fingerprint else { return }
+        advertiser?.stop()
+        advertiser = nil
+        startAdvertising(port: port, fingerprint: fingerprint)
+    }
+
     func stop() {
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+            self.wakeObserver = nil
+        }
         heartbeatTimer?.cancel()
         heartbeatTimer = nil
         for session in sessions.values {

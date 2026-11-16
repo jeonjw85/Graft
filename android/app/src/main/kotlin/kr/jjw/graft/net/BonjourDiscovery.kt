@@ -3,6 +3,10 @@ package kr.jjw.graft.net
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kr.jjw.graft.core.BonjourServiceInfo
 
 /** A Mac found on the LAN. */
@@ -68,6 +72,38 @@ class BonjourDiscovery(context: Context) {
         resolveListener = listener
         runCatching { nsdManager.resolveService(service, listener) }
             .onFailure { onFailure("Could not resolve the Mac's address") }
+    }
+
+    /**
+     * Searches the LAN for the Mac this phone trusts.
+     *
+     * Bounded on purpose: discovery is a fallback for a changed address, not a replacement for the
+     * saved one. A host is returned only when its advertised fingerprint matches [pinnedFingerprint]
+     * (or starts with [prefix] before the first pairing).
+     */
+    suspend fun find(
+        pinnedFingerprint: String?,
+        prefix: String?,
+        timeoutMillis: Long = 4_000,
+    ): DiscoveredHost? {
+        stop()
+        return withTimeoutOrNull(timeoutMillis) {
+            suspendCancellableCoroutine { continuation ->
+                val delivered = AtomicBoolean(false)
+                start(
+                    onFound = { host ->
+                        if (ReconnectTarget.match(pinnedFingerprint, prefix, listOf(host)) != null &&
+                            delivered.compareAndSet(false, true)
+                        ) {
+                            stop()
+                            continuation.resume(host)
+                        }
+                    },
+                    onFailure = { /* keep waiting until the timeout */ },
+                )
+                continuation.invokeOnCancellation { stop() }
+            }
+        }
     }
 
     fun stop() {

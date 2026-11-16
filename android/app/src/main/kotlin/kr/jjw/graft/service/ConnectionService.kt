@@ -10,6 +10,8 @@ import android.os.Build
 import android.app.Service
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +41,9 @@ import kr.jjw.graft.files.TransferCoordinator
 import kr.jjw.graft.files.FallbackFileReceivingFactory
 import kr.jjw.graft.files.MediaStoreFileReceivingFactory
 import kr.jjw.graft.files.SafeFilename
+import kr.jjw.graft.net.BonjourDiscovery
+import kr.jjw.graft.net.DiscoveredHost
+import kr.jjw.graft.net.NetworkMonitor
 import kr.jjw.graft.files.TransferFailureKind
 import kr.jjw.graft.files.TransferIds
 import kr.jjw.graft.ui.GraftActivity
@@ -53,6 +58,10 @@ import kr.jjw.graft.ui.GraftActivity
 class ConnectionService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var connectJob: Job? = null
+    private var discoveryJob: Job? = null
+    @Volatile private var discoveredTarget: DiscoveredHost? = null
+    private val wake = Channel<Unit>(Channel.CONFLATED)
+    private var networkMonitor: NetworkMonitor? = null
     private var client: GraftClient? = null
     private var coordinator: TransferCoordinator? = null
     private var retryAttempt = 0
@@ -62,6 +71,7 @@ class ConnectionService : Service() {
         super.onCreate()
         instance = this
         createChannel()
+        networkMonitor = NetworkMonitor(this) { wake.trySend(Unit) }.also { it.start() }
         startForeground(NOTIFICATION_ID, buildNotification("Starting…"))
     }
 
@@ -90,6 +100,8 @@ class ConnectionService : Service() {
 
     override fun onDestroy() {
         instance = null
+        networkMonitor?.stop()
+        networkMonitor = null
         stopConnection()
         scope.cancel()
         super.onDestroy()
@@ -152,8 +164,7 @@ class ConnectionService : Service() {
         if (connectJob?.isActive == true) return
 
         connectJob = scope.launch {
-            val offer = loadPairingOffer()
-            if (offer == null) {
+            var offer = loadPairingOffer() ?: run {
                 ConnectionRepository.reset()
                 updateNotification("Not paired")
                 return@launch
@@ -167,9 +178,51 @@ class ConnectionService : Service() {
                 val waitMillis = backoffMillis(retryAttempt)
                 ConnectionRepository.onEvent(ConnectionEvent.Closed(TransportCloseReason.NETWORK))
                 updateNotification("Reconnecting in ${waitMillis / 1000}s")
-                delay(waitMillis)
+
+                // Use an address found by a background probe. The probe itself must never block
+                // this loop: some devices' NSD blocks its caller when mDNS is filtered.
+                discoveredTarget?.let { found ->
+                    discoveredTarget = null
+                    if (found.host != offer.host || found.port != offer.port) {
+                        offer = offer.copy(host = found.host, port = found.port)
+                        saveOfferAddress(offer)
+                        retryAttempt = 0
+                        updateNotification("Found your Mac at ${found.host}")
+                    }
+                }
+                startDiscoveryProbe(offer)
+
+                // A network that comes back should retry now, not after a minute of backoff.
+                withTimeoutOrNull(waitMillis) { wake.receive() }
             }
         }
+    }
+
+    /** Looks for the trusted Mac in the background and keeps the newest address for the retry. */
+    private fun startDiscoveryProbe(offer: PairingOffer) {
+        if (discoveryJob?.isActive == true) return
+
+        val stored = PeerStore(File(filesDir, "peers.json")).load().firstOrNull()
+        val pinned = offer.fingerprint.ifEmpty { stored?.fingerprint ?: "" }
+        val prefix = if (pinned.isEmpty()) loadManualPrefix() else null
+        if (pinned.isEmpty() && prefix == null) return
+
+        discoveryJob = scope.launch {
+            val found = runCatching {
+                BonjourDiscovery(applicationContext).find(
+                    pinnedFingerprint = pinned.ifEmpty { null },
+                    prefix = prefix,
+                )
+            }.getOrNull()
+            if (found != null) discoveredTarget = found
+        }
+    }
+
+    private fun saveOfferAddress(offer: PairingOffer) {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putString("host", offer.host)
+            .putInt("port", offer.port)
+            .apply()
     }
 
     /**
