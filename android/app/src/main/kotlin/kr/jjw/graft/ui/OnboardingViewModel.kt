@@ -29,14 +29,8 @@ class OnboardingViewModel {
     fun advance() {
         state = when (state.step) {
             OnboardingStep.Welcome -> state.copy(step = OnboardingStep.Permissions, error = null)
-            OnboardingStep.Permissions ->
-                if (state.notificationAccessGranted) {
-                    state.copy(step = OnboardingStep.Scan, error = null)
-                } else {
-                    state.copy(
-                        error = "Notification access is required to show phone alerts on your Mac"
-                    )
-                }
+            // Notification forwarding is optional, so skipping it must not trap the user here.
+            OnboardingStep.Permissions -> state.copy(step = OnboardingStep.Scan, error = null)
             OnboardingStep.Scan -> state.copy(step = OnboardingStep.Done, error = null)
             OnboardingStep.Done -> state
         }

@@ -20,17 +20,14 @@ class OnboardingViewModelTest {
     }
 
     @Test
-    fun `blocked notification access prevents proceeding`() {
+    fun `skipping notification access still reaches the scan step`() {
         viewModel.advance()
         viewModel.onPermissionResult("notifications", false)
 
         viewModel.advance()
 
-        assertEquals(OnboardingStep.Permissions, viewModel.state.step)
-        assertEquals(
-            "Notification access is required to show phone alerts on your Mac",
-            viewModel.state.error,
-        )
+        assertEquals(OnboardingStep.Scan, viewModel.state.step)
+        assertEquals(null, viewModel.state.error)
     }
 
     @Test
