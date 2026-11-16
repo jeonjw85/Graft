@@ -1,13 +1,16 @@
 import XCTest
 @testable import GraftApp
+import GraftMacKit
 
 @MainActor
 final class GraftServiceTests: XCTestCase {
     func testPortInUseReportsFailure() throws {
         let port = try occupyFreePort()
-        defer { close(port.socket) }
+        defer { closeProbeSocket(port.socket) }
 
-        let service = GraftService(port: port.number, storeURL: temporaryStoreURL())
+        let tag = temporaryIdentityTag()
+        defer { DeviceIdentity.delete(tag: tag) }
+        let service = GraftService(port: port.number, storeURL: temporaryStoreURL(), identityTag: tag)
 
         do {
             try service.start()
@@ -19,9 +22,11 @@ final class GraftServiceTests: XCTestCase {
 
     func testStartReturnsPairingURIWhilePairing() throws {
         let port = try occupyFreePort()
-        close(port.socket)
+        closeProbeSocket(port.socket)
 
-        let service = GraftService(port: port.number, storeURL: temporaryStoreURL())
+        let tag = temporaryIdentityTag()
+        defer { DeviceIdentity.delete(tag: tag) }
+        let service = GraftService(port: port.number, storeURL: temporaryStoreURL(), identityTag: tag)
         try service.start()
         defer { service.stop() }
 
@@ -34,8 +39,10 @@ final class GraftServiceTests: XCTestCase {
 
     func testUsingTheQRCodeAgainClearsTheTypedValues() throws {
         let port = try occupyFreePort()
-        close(port.socket)
-        let service = GraftService(port: port.number, storeURL: temporaryStoreURL())
+        closeProbeSocket(port.socket)
+        let tag = temporaryIdentityTag()
+        defer { DeviceIdentity.delete(tag: tag) }
+        let service = GraftService(port: port.number, storeURL: temporaryStoreURL(), identityTag: tag)
         try service.start()
         defer { service.stop() }
 
@@ -53,7 +60,9 @@ final class GraftServiceTests: XCTestCase {
         let store = PeerStore(url: url)
         try store.add(PairedPeer(fingerprint: "fp", name: "Phone", platform: "android", pairedAtMillis: 1))
 
-        let service = GraftService(port: 47999, storeURL: url)
+        let tag = temporaryIdentityTag()
+        defer { DeviceIdentity.delete(tag: tag) }
+        let service = GraftService(port: 47999, storeURL: url, identityTag: tag)
         service.reloadPeers()
         XCTAssertEqual(service.peers.count, 1)
 
@@ -64,10 +73,17 @@ final class GraftServiceTests: XCTestCase {
 
     func testPairingURIExpiresAfterTwoMinutes() throws {
         let port = try occupyFreePort()
-        close(port.socket)
+        closeProbeSocket(port.socket)
 
         let now = Date(timeIntervalSince1970: 1_762_752_000)
-        let service = GraftService(port: port.number, storeURL: temporaryStoreURL(), clock: { now })
+        let tag = temporaryIdentityTag()
+        defer { DeviceIdentity.delete(tag: tag) }
+        let service = GraftService(
+            port: port.number,
+            storeURL: temporaryStoreURL(),
+            clock: { now },
+            identityTag: tag
+        )
         try service.start()
         defer { service.stop() }
 
@@ -95,48 +111,5 @@ final class GraftServiceTests: XCTestCase {
             service.pendingPairedPeer,
             "forgetting must clear the pending record so it cannot be written back"
         )
-    }
-
-    // MARK: - helpers
-
-    private func temporaryStoreURL() -> URL {
-        URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("graft-service-\(UUID().uuidString)", isDirectory: true)
-            .appendingPathComponent("peers.json")
-    }
-
-    private struct BoundPort {
-        let socket: Int32
-        let number: UInt16
-    }
-
-    private func occupyFreePort() throws -> BoundPort {
-        let socketFD = socket(AF_INET, SOCK_STREAM, 0)
-        XCTAssertGreaterThanOrEqual(socketFD, 0)
-
-        var address = sockaddr_in()
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        address.sin_addr.s_addr = inet_addr("127.0.0.1")
-        address.sin_port = 0
-
-        let bound = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.bind(socketFD, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-        guard bound == 0 else { throw XCTSkip("could not bind a probe socket") }
-
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        withUnsafeMutablePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.getsockname(socketFD, $0, &length)
-            }
-        }
-        return BoundPort(socket: socketFD, number: UInt16(bigEndian: address.sin_port))
-    }
-
-    private func close(_ socketFD: Int32) {
-        Darwin.close(socketFD)
     }
 }

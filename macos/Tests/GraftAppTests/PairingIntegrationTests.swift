@@ -13,7 +13,9 @@ final class PairingIntegrationTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: storeURL.deletingLastPathComponent()) }
 
         let port = try freePort()
-        let service = GraftService(port: port, storeURL: storeURL)
+        let serviceTag = temporaryIdentityTag()
+        defer { DeviceIdentity.delete(tag: serviceTag) }
+        let service = GraftService(port: port, storeURL: storeURL, identityTag: serviceTag)
         try service.start()
         defer { service.stop() }
 

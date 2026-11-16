@@ -70,21 +70,28 @@ struct PairingWindowView: View {
         .padding(24)
         .frame(minWidth: 420, minHeight: 560)
         .background(Palette.background)
-        .background(
-            WindowAccessor { window in
-                self.window = window
-                if revoker == nil {
-                    // Closing the window must kill the offer; onDisappear is not called for a
-                    // Window scene, so observe the AppKit close instead.
-                    revoker = WindowCloseRevoker(window: window) { service.cancelPairing() }
-                }
-                window.makeKeyAndOrderFront(nil)
-            }
-        )
+        .onAppear { attachToWindow(attempts: 10) }
         .onChange(of: service.menuState.isConnected) { connected in
             if connected { window?.close() }
         }
         .onDisappear { service.cancelPairing() }
+    }
+
+    /// Finds the scene's window and installs the close hook.
+    ///
+    /// The window may not exist on the first `onAppear`, so this retries on the next runloop ticks
+    /// rather than depending on a hosting view that SwiftUI never attaches.
+    private func attachToWindow(attempts: Int) {
+        if let window = PairingWindowLocator.find(in: NSApp.windows) {
+            self.window = window
+            if revoker == nil {
+                revoker = WindowCloseRevoker(window: window) { service.cancelPairing() }
+            }
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+        guard attempts > 0 else { return }
+        DispatchQueue.main.async { attachToWindow(attempts: attempts - 1) }
     }
 
     private func qr(_ image: NSImage) -> some View {

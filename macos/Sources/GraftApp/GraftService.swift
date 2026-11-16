@@ -114,13 +114,18 @@ final class GraftService: ObservableObject {
     /// later frame cannot silently re-add it.
     private(set) var pendingPairedPeer: (fingerprint: String, name: String)?
 
-    init(port: UInt16 = 47800, storeURL: URL? = nil, clock: @escaping () -> Date = Date.init) {
+    init(
+        port: UInt16 = 47800,
+        storeURL: URL? = nil,
+        clock: @escaping () -> Date = Date.init,
+        identityTag: String = "kr.jjw.graft.mac"
+    ) {
         self.port = port
         self.clock = clock
         self.store = PeerStore(url: storeURL ?? Self.defaultStoreURL())
 
         do {
-            let identity = try DeviceIdentity.loadOrCreate(tag: "kr.jjw.graft.mac")
+            let identity = try DeviceIdentity.loadOrCreate(tag: identityTag)
             self.identity = identity
             self.pairingService = PairingService(local: identity, paired: Set(store.load().map(\.fingerprint)))
         } catch {

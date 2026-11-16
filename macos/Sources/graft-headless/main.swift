@@ -14,6 +14,7 @@ struct Arguments {
     var receiveDir: String?
     var numeric = false
     var clipboardText: String?
+    var deleteIdentity = false
 }
 
 func parseArguments() -> Arguments {
@@ -37,6 +38,8 @@ func parseArguments() -> Arguments {
             arguments.numeric = true
         case "--clipboard":
             if let value = iterator.next() { arguments.clipboardText = value }
+        case "--delete-identity":
+            arguments.deleteIdentity = true
         default:
             continue
         }
@@ -48,6 +51,13 @@ let arguments = parseArguments()
 setvbuf(stdout, nil, _IONBF, 0)
 
 do {
+    if arguments.deleteIdentity {
+        // Keychain ACLs are tied to the binary's signature; a rebuilt ad-hoc binary cannot read a
+        // key an earlier build created, so device checks need a way to start over.
+        DeviceIdentity.delete(tag: arguments.identityTag)
+        print("IDENTITY_DELETED \(arguments.identityTag)")
+        exit(0)
+    }
     let identity = try DeviceIdentity.loadOrCreate(tag: arguments.identityTag)
     let service = PairingService(local: identity)
     let authorizer = PeerAuthorizer(
