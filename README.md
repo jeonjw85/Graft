@@ -16,6 +16,13 @@ An open-source tool that connects a Mac and an Android phone over the same Wi-Fi
 
 Graft does not send Mac notifications to Android, because macOS has no public API for reading other apps' notifications. See the [threat model](docs/threat-model.md) for details.
 
+The Android app opens on a three-tab layout once a phone is paired: **Connection** (link state,
+pairing, clipboard), **Files** (send, progress, recent transfers with an Open action), and **Alerts**
+(notification access, allowed apps, recent forwards). It has a single dark appearance by design.
+
+Received files land in `Download/Graft` so they are visible to other apps; if Android refuses the
+MediaStore insert, the file is kept in app storage and the row says so.
+
 Current state: pairing, file transfer (both directions), clipboard sharing, and Android to Mac notification forwarding are implemented. The Android app scans the QR code, sends files, copies a received clipboard while it is open, and keeps its connection alive in the background.
 
 ## Requirements

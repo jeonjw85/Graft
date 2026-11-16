@@ -45,6 +45,12 @@ seconds.
 If a different Mac is already paired, a manual pairing does not silently replace it; the app stops
 and asks you to forget the existing device first.
 
+## In the Android app
+
+Reach pairing from onboarding (first run) or from **Connection → Pair another phone**. Both show the
+same camera preview and manual form. A paired phone skips onboarding on every later launch; use
+**Forget this Mac** to clear the pin and return to onboarding.
+
 ## Which flow should I use
 
 Use the QR code when the camera works: it carries the fingerprint, so there is nothing to compare by

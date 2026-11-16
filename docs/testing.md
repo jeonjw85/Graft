@@ -105,8 +105,15 @@ is a paired peer. Both sides verify SHA-256 before the file is committed.
 - [ ] The macOS app shows a menu bar icon at launch and binds port 47800 (verify with `lsof -nP -iTCP:47800 -sTCP:LISTEN`).
 - [ ] Pairing a real phone from the menu window stores the peer in `~/Library/Application Support/Graft/peers.json`.
 - [ ] Restarting the Mac app keeps the peer listed and reconnects without a new scan.
+- [ ] Launching with a paired phone opens the Connection tab directly, with no onboarding.
+- [ ] Back on the Files or Alerts tab returns to Connection; back on Connection leaves the app.
+- [ ] A file received from the Mac appears in the Files tab and opens from its Open action.
+- [ ] The received file is visible in `Download/Graft` with the system Files app.
+- [ ] A file received while MediaStore is unavailable shows `Saved to app storage`.
 - [ ] Sending a file from the phone shows progress and lands in the Mac's downloads folder.
 - [ ] Sending a file while disconnected shows "Connect to your Mac first" instead of failing silently.
+- [ ] A rejected transfer reads `Rejected`, not `Not paired`, in the Files tab.
+- [ ] No screen shows a light surface, including the manual pairing form and the alerts lists.
 - [ ] A clipboard received while the phone app is open is copied and shows "Copied to clipboard".
 - [ ] A clipboard received while the phone app was closed is not pasted over the user's clipboard later.
 - [ ] On first launch the Mac asks for notification permission once, and a denial does not break pairing or transfers.
