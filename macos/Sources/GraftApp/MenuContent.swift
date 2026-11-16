@@ -1,7 +1,18 @@
 import SwiftUI
+import GraftMacKit
 
+/// The menu bar popover: the link state, then the three things a user does with it.
 struct MenuContent: View {
     @ObservedObject var service: GraftService
+    @Environment(\.openWindow) private var openWindow
+
+    private var summary: PopoverSummary {
+        PopoverSummary.from(
+            state: service.menuState,
+            peerAddress: service.peerAddress,
+            fingerprintPrefix: service.fingerprintPrefix
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -11,90 +22,87 @@ struct MenuContent: View {
 
             header
 
-            if let error = service.menuState.errorMessage {
-                Text(error)
-                    .font(.callout)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if service.menuState.status == .pairing {
-                PairingView(service: service)
-            } else if service.menuState.canPair {
-                Button("Pair a phone") {
-                    service.beginPairing()
-                }
-                Button("Pair without a camera") {
-                    service.beginManualPairing()
-                }
-                .buttonStyle(.link)
+            if service.menuState.canPair || service.menuState.status == .pairing {
+                pairingActions
             }
 
             peerList
 
-            if service.menuState.isConnected {
+            if service.menuState.isConnected || !service.transfers.isEmpty {
                 Divider()
-                clipboardSection
-                Divider()
-                TransferProgressView(service: service)
-            }
-
-            if !service.recentNotifications.isEmpty {
-                Divider()
-                notificationsSection
+                actions
             }
 
             Divider()
-
-            HStack {
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-                Spacer()
-            }
+            footer
         }
         .padding(16)
         .frame(width: 320)
+        .background(Palette.background)
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: service.statusSymbol)
-                .foregroundStyle(service.statusColor)
-            Text(service.menuState.statusLabel)
-                .font(.headline)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Palette.color(for: Palette.tone(for: service.menuState.status)))
+                    .frame(width: 8, height: 8)
+                Text(summary.title)
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            summary.detail.map {
+                Text($0)
+                    .font(.caption)
+                    .foregroundStyle(Palette.onSurfaceVariant)
+                    .textSelection(.enabled)
+            }
+            if summary.showsError, let error = service.menuState.errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(Palette.error)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
-    private var notificationsSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Recent alerts")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            ForEach(service.recentNotifications.prefix(5), id: \.postedAt) { item in
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(item.app).font(.caption.bold())
-                    Text(item.title.isEmpty ? item.body : "\(item.title) — \(item.body)")
+    private var pairingActions: some View {
+        HStack(spacing: 8) {
+            Button("Pair a phone") {
+                service.beginPairing()
+                openWindow(id: "pairing")
+            }
+            Button("Pair without a camera") {
+                service.beginManualPairing()
+                openWindow(id: "pairing")
+            }
+            .buttonStyle(.link)
+        }
+    }
+
+    private var actions: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Button("Send a file…") { chooseFile() }
+                    .disabled(!service.menuState.isConnected)
+                Spacer()
+                Button("Send clipboard") { service.sendClipboard() }
+                    .disabled(!service.menuState.isConnected)
+            }
+
+            ForEach(Array(service.transfers.values).sorted { $0.name < $1.name }, id: \.name) { progress in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(progress.name)
                         .font(.caption)
-                        .lineLimit(1)
-                        .foregroundStyle(.secondary)
+                    ProgressView(value: min(max(progress.fraction, 0), 1))
+                        .controlSize(.small)
                 }
             }
-        }
-    }
 
-    private var clipboardSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Button("Send clipboard") { service.sendClipboard() }
-                Spacer()
-                Toggle("Copy received", isOn: $service.autoCopyClipboard)
-                    .toggleStyle(.checkbox)
-            }
-            if let last = service.lastSharedClipboard {
-                Text("Last sent: \(last)")
+            if let failure = service.transferFailure {
+                Text(failure)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .foregroundStyle(Palette.error)
             }
         }
     }
@@ -104,22 +112,48 @@ struct MenuContent: View {
             if service.peers.isEmpty {
                 Text("No paired phones yet.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.onSurfaceVariant)
             } else {
-                Text("Paired phones")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 ForEach(service.peers, id: \.fingerprint) { peer in
                     HStack {
                         Text(peer.name)
+                            .font(.callout)
                         Spacer()
-                        Button("Forget") {
-                            service.forgetPeer(fingerprint: peer.fingerprint)
+                        Menu {
+                            Button("Forget", role: .destructive) {
+                                service.forgetPeer(fingerprint: peer.fingerprint)
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
                         }
-                        .buttonStyle(.link)
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .accessibilityLabel("Actions for \(peer.name)")
                     }
                 }
             }
         }
+    }
+
+    private var footer: some View {
+        HStack {
+            Button("Settings…") { openSettings() }
+            Spacer()
+            Button("Quit") { NSApplication.shared.terminate(nil) }
+        }
+    }
+
+    private func chooseFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        _ = service.sendFile(url: url)
+    }
+
+    /// `SettingsLink` is macOS 14+, and this app runs on 13.
+    private func openSettings() {
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 }

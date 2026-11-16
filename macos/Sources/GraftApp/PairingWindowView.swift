@@ -1,6 +1,19 @@
 import SwiftUI
 import GraftMacKit
 
+/// Presentation rule for a six-digit code: grouped so it can be read aloud and typed.
+struct PairingViewState {
+    let fallbackCode: String?
+
+    var displayCode: String {
+        guard let code = fallbackCode, code.count == 6, code.allSatisfy(\.isNumber) else {
+            return fallbackCode ?? ""
+        }
+        let middle = code.index(code.startIndex, offsetBy: 3)
+        return "\(code[..<middle]) \(code[middle...])"
+    }
+}
+
 /// The pairing offer in its own window: a QR code, or the three values to type.
 ///
 /// Closing the window revokes the token, so an offer never outlives the window that showed it.
@@ -64,7 +77,12 @@ struct PairingWindowView: View {
             Text("Type these on your phone")
                 .font(.headline)
 
-            row(label: "Code", value: grouped(manual.code), monospaced: true, size: 24)
+            row(
+                label: "Code",
+                value: PairingViewState(fallbackCode: manual.code).displayCode,
+                monospaced: true,
+                size: 24
+            )
             row(label: "Fingerprint", value: manual.fingerprintPrefix, monospaced: true, size: 15)
             row(label: "Address", value: "\(manual.host):\(manual.port)", monospaced: true, size: 15)
 
@@ -94,11 +112,5 @@ struct PairingWindowView: View {
                 .font(monospaced ? .system(size: size, design: .monospaced) : .system(size: size))
                 .textSelection(.enabled)
         }
-    }
-
-    private func grouped(_ code: String) -> String {
-        guard code.count == 6 else { return code }
-        let middle = code.index(code.startIndex, offsetBy: 3)
-        return "\(code[..<middle]) \(code[middle...])"
     }
 }

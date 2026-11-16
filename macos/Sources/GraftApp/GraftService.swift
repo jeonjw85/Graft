@@ -28,6 +28,8 @@ final class GraftService: ObservableObject {
     @Published var autoCopyClipboard = true
     @Published private(set) var notificationPreviews = true
     @Published private(set) var notificationsAllowed: Bool?
+    /// Address the phone is expected at, shown in the popover.
+    @Published private(set) var peerAddress: String?
     @Published private(set) var lastSharedClipboard: String?
     @Published private(set) var recentNotifications: [NotificationPresenter.Recent] = []
 
@@ -63,6 +65,11 @@ final class GraftService: ObservableObject {
     /// The certificate fingerprint the phone pins, so a user can compare it by eye.
     var localFingerprint: String {
         identity?.fingerprint ?? ""
+    }
+
+    /// The eight characters a user compares against the phone.
+    var fingerprintPrefix: String {
+        String(localFingerprint.prefix(8))
     }
 
     var versionText: String {
@@ -234,6 +241,7 @@ final class GraftService: ObservableObject {
         )
         pairingURI = result.uri
         qrImage = QRImage.make(from: result.uri, scale: 8)
+        peerAddress = "\(Self.localAddress() ?? "127.0.0.1"):\(assignedPort)"
         menuState = MenuState(status: .pairing, peerName: nil)
     }
 
@@ -248,6 +256,7 @@ final class GraftService: ObservableObject {
             deviceName: Host.current().localizedName ?? "Graft Mac"
         )
         manualPairing = pairing
+        peerAddress = "\(pairing.host):\(pairing.port)"
         pairingURI = nil
         qrImage = nil
         menuState = MenuState(status: .pairing, peerName: nil)
