@@ -19,6 +19,10 @@ final class GraftService: ObservableObject {
     @Published private(set) var qrImage: NSImage?
     @Published private(set) var manualPairing: PairingService.NumericPairing?
     @Published private(set) var transfers: [UInt32: TransferProgress] = [:]
+    @Published private(set) var transferHistory: [MacTransferRecord] = []
+
+    private let history = TransferHistory()
+    private var recordedOutcomes: [UInt32: TransferFailure?] = [:]
     @Published private(set) var transferFailure: String?
     @Published private(set) var receiveDirectory: URL = GraftService.defaultReceiveDirectory()
     @Published var autoCopyClipboard = true
@@ -171,6 +175,9 @@ final class GraftService: ObservableObject {
         advertiser = nil
         server?.stop()
         server = nil
+        recordedOutcomes.removeAll()
+        history.clear()
+        transferHistory = []
     }
 
     func markStarted() {
@@ -399,8 +406,28 @@ final class GraftService: ObservableObject {
             if let failure = coordinator.failures.values.first {
                 transferFailure = Self.describe(failure)
             }
+            recordFinishedTransfers(coordinator)
         }
         transfers = merged
+        transferHistory = history.records
+    }
+
+    /// Records each transfer once per outcome, so a failed retry that later commits updates its row.
+    private func recordFinishedTransfers(_ coordinator: TransferCoordinator) {
+        for id in coordinator.completed.union(coordinator.failures.keys) {
+            let failure = coordinator.failures[id]
+            if recordedOutcomes.keys.contains(id), recordedOutcomes[id]! == failure { continue }
+            recordedOutcomes[id] = .some(failure)
+
+            let progress = coordinator.progress[id]
+            history.record(
+                id: id,
+                name: progress?.name ?? "File",
+                bytes: progress?.total ?? 0,
+                direction: progress?.direction ?? .receive,
+                failure: failure
+            )
+        }
     }
 
     private static func describe(_ failure: TransferFailure) -> String {
