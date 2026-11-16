@@ -43,6 +43,7 @@ class GraftActivity : ComponentActivity() {
                             transfers = remember { mutableStateMapOf<UInt, kr.jjw.graft.files.TransferProgress>() },
                             modifier = Modifier.padding(horizontal = 24.dp),
                         )
+                        NotificationAccessScreen(modifier = Modifier.padding(24.dp))
                     }
                 }
             }

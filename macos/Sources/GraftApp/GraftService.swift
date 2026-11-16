@@ -21,6 +21,7 @@ final class GraftService: ObservableObject {
     @Published private(set) var transferFailure: String?
     @Published private(set) var receiveDirectory: URL = GraftService.defaultReceiveDirectory()
     @Published var autoCopyClipboard = true
+    @Published private(set) var notificationPreviews = true
     @Published private(set) var lastSharedClipboard: String?
     @Published private(set) var recentNotifications: [NotificationPresenter.Recent] = []
 
@@ -314,6 +315,12 @@ final class GraftService: ObservableObject {
     }
 
     /// Sends the current pasteboard text to the connected phone.
+    /// Toggles whether notification bodies are shown in the banner.
+    func updateNotificationPreview(enabled: Bool) {
+        notifications.showPreviews = enabled
+        notificationPreviews = enabled
+    }
+
     func sendClipboard() {
         guard let envelope = clipboard.outgoing() else {
             transferFailure = "There is no text on the clipboard"

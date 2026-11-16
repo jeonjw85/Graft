@@ -22,6 +22,9 @@ public final class NotificationPresenter {
     private let port: NotificationCenterPort
     public private(set) var recent: [Recent] = []
 
+    /// When false, the banner says only which app alerted, never the text.
+    public var showPreviews = true
+
     public init(port: NotificationCenterPort) {
         self.port = port
     }
@@ -40,7 +43,7 @@ public final class NotificationPresenter {
         let postedAt = payload["ts"]?.numberValue.map(UInt64.init) ?? 0
         let body = Self.truncate(text, maxBytes: Self.maxBodyBytes)
 
-        port.add(title: app, body: body)
+        port.add(title: app, body: showPreviews ? body : "New notification")
         recent.insert(Recent(app: app, title: title, body: body, postedAt: postedAt), at: 0)
         if recent.count > Self.maxRecent {
             recent.removeLast(recent.count - Self.maxRecent)
