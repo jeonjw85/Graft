@@ -20,6 +20,8 @@ data class ConnectionUiState(
     /** Set when the last attempt to send a file failed, so the screen can show why. */
     val outgoingError: String? = null,
     val recentNotifications: List<kr.jjw.graft.notifications.PostedNotification> = emptyList(),
+    /** Finished transfers, newest first. */
+    val history: List<TransferRecord> = emptyList(),
 )
 
 /**
@@ -35,9 +37,11 @@ object ConnectionRepository {
     val state: StateFlow<ConnectionUiState> = _state.asStateFlow()
 
     private var pairedName: String? = null
+    private val transferHistory = TransferHistory()
 
     fun reset() {
         pairedName = null
+        transferHistory.clear()
         _state.value = ConnectionUiState()
     }
 
@@ -74,6 +78,26 @@ object ConnectionRepository {
         _state.update {
             it.copy(outgoingError = if (success) null else (message ?: "Could not send the file"))
         }
+    }
+
+    /** Records a finished transfer once, so the Files tab can show it. */
+    fun onTransferFinished(
+        id: UInt,
+        name: String,
+        bytes: Long,
+        direction: kr.jjw.graft.core.TransferDirection,
+        error: kr.jjw.graft.files.TransferFailureKind?,
+        destination: String?,
+    ) {
+        transferHistory.record(
+            id = id,
+            name = name,
+            bytes = bytes,
+            direction = direction,
+            error = error,
+            destination = destination,
+        )
+        _state.update { it.copy(history = transferHistory.list) }
     }
 
     fun onClipboardReceived(text: String) {

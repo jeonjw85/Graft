@@ -27,6 +27,9 @@ enum class TransferFailureKind {
     WRONG_OFFSET,
     HASH_MISMATCH,
     READ_FAILED,
+
+    /** The peer refused the offer. */
+    REJECTED,
 }
 
 /**
@@ -197,7 +200,7 @@ class TransferCoordinator(
 
     private fun handleReject(envelope: Envelope) {
         val tid = tidOf(envelope) ?: return
-        failures[tid] = TransferFailureKind.UNPAIRED_PEER
+        failures[tid] = TransferFailureKind.REJECTED
         senders.remove(tid)
     }
 
