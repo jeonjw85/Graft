@@ -39,9 +39,6 @@ struct MenuContent: View {
                 TransferProgressView(service: service)
             }
 
-            Divider()
-            NotificationSettingsView(service: service)
-
             if !service.recentNotifications.isEmpty {
                 Divider()
                 notificationsSection

@@ -21,6 +21,10 @@ struct GraftApp: App {
             PairingWindowView(service: service)
         }
         .defaultSize(width: 420, height: 560)
+
+        Settings {
+            SettingsWindowView(service: service)
+        }
     }
 }
 

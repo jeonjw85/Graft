@@ -47,6 +47,39 @@ final class GraftService: ObservableObject {
         authorization: SystemNotificationAuthorization()
     )
 
+    /// One sentence for the settings window, kept free of AppKit so it can be tested.
+    nonisolated static func notificationStatusText(allowed: Bool?) -> String {
+        switch allowed {
+        case .some(true): return "Allowed"
+        case .some(false): return "Notifications are turned off for Graft"
+        case .none: return "Not asked yet"
+        }
+    }
+
+    var notificationStatus: String {
+        Self.notificationStatusText(allowed: notificationsAllowed)
+    }
+
+    /// The certificate fingerprint the phone pins, so a user can compare it by eye.
+    var localFingerprint: String {
+        identity?.fingerprint ?? ""
+    }
+
+    var versionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        return "Graft \(version ?? "0.1.0")"
+    }
+
+    func clearRecentNotifications() {
+        notifications.clearRecent()
+        recentNotifications = []
+    }
+
+    /// Shows the received files in Finder.
+    func revealReceiveDirectory() {
+        NSWorkspace.shared.activateFileViewerSelecting([receiveDirectory])
+    }
+
     /// Asks for notification permission once, so banners can appear the first time a phone alerts.
     func requestNotificationAuthorization() {
         notifications.onAuthorizationChange = { [weak self] granted in

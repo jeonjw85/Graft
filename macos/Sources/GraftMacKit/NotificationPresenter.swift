@@ -80,6 +80,11 @@ public final class NotificationPresenter {
         return true
     }
 
+    /// Forgets the recent list without changing the user's permission.
+    public func clearRecent() {
+        recent.removeAll()
+    }
+
     /// Truncates on a UTF-8 boundary so a Korean character is never cut in half.
     public static func truncate(_ value: String, maxBytes: Int) -> String {
         guard value.utf8.count > maxBytes else { return value }
