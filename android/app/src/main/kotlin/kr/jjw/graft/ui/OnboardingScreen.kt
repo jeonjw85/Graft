@@ -10,8 +10,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -254,6 +257,32 @@ fun OnboardingScreen(viewModel: OnboardingViewModel) {
                 Spacer(Modifier.height(8.dp))
                 Button(onClick = { ConnectionService.stop(context) }) {
                     Text("Disconnect")
+                }
+
+                val pickFile = rememberLauncherForActivityResult(
+                    ActivityResultContracts.OpenDocument()
+                ) { uri -> uri?.let { ConnectionService.sendFile(context, it) } }
+
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = { pickFile.launch(arrayOf("*/*")) }) {
+                    Text("Send a file to Mac")
+                }
+                connection.transfers.values
+                    .filter { it.direction == kr.jjw.graft.core.TransferDirection.send }
+                    .forEach { progress ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "${progress.name} ${(progress.fraction * 100).toInt()}%",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        LinearProgressIndicator(
+                            progress = { progress.fraction.toFloat() },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                connection.outgoingError?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
 
                 val derived = ConnectedScreenState.from(connection)

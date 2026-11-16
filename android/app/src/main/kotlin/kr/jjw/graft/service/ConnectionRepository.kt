@@ -15,6 +15,8 @@ data class ConnectionUiState(
     val transfers: Map<UInt, TransferProgress> = emptyMap(),
     val lastError: String? = null,
     val lastClipboard: String? = null,
+    /** Set when the last attempt to send a file failed, so the screen can show why. */
+    val outgoingError: String? = null,
     val recentNotifications: List<kr.jjw.graft.notifications.PostedNotification> = emptyList(),
 )
 
@@ -63,6 +65,13 @@ object ConnectionRepository {
 
     fun onTransferProgress(progress: Map<UInt, TransferProgress>) {
         _state.update { it.copy(transfers = progress) }
+    }
+
+    /** Records the outcome of sending a file from the phone. */
+    fun onOutgoingFileResult(success: Boolean, message: String?) {
+        _state.update {
+            it.copy(outgoingError = if (success) null else (message ?: "Could not send the file"))
+        }
     }
 
     fun onClipboardReceived(text: String) {

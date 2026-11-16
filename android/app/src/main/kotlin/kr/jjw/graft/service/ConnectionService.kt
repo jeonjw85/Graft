@@ -16,6 +16,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kr.jjw.graft.core.Envelope
@@ -33,6 +34,8 @@ import kr.jjw.graft.data.AndroidKeyStoreBackend
 import kr.jjw.graft.data.PeerStore
 import kr.jjw.graft.files.DirectoryFileReceiving
 import kr.jjw.graft.files.TransferCoordinator
+import kr.jjw.graft.files.SafeFilename
+import kr.jjw.graft.files.TransferIds
 import kr.jjw.graft.ui.GraftActivity
 
 /**
@@ -60,6 +63,13 @@ class ConnectionService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
 
         when (intent?.action) {
+            ACTION_SEND_FILE -> {
+                val uri = intent.getParcelableExtra(EXTRA_URI, android.net.Uri::class.java)
+                startConnection()
+                if (uri != null) scope.launch { sendPickedFile(uri) }
+                return START_STICKY
+            }
+
             ACTION_DISCONNECT -> {
                 stopConnection()
                 stopSelf()
@@ -79,6 +89,54 @@ class ConnectionService : Service() {
         scope.cancel()
         super.onDestroy()
     }
+
+    /**
+     * Copies the picked document into the cache and offers it to the Mac.
+     *
+     * The transfer coordinator works with files, not content URIs, and the document provider may
+     * revoke access once the picker returns; copying first keeps the transfer independent of that.
+     */
+    private suspend fun sendPickedFile(uri: android.net.Uri) = withContext(Dispatchers.IO) {
+        val sessionCoordinator = coordinator
+        if (sessionCoordinator == null ||
+            ConnectionRepository.state.value.status !is ConnectionStatus.Connected
+        ) {
+            ConnectionRepository.onOutgoingFileResult(false, "Connect to your Mac first")
+            return@withContext
+        }
+
+        val directory = File(cacheDir, "outgoing").apply { mkdirs() }
+        // A provider can report any display name; keep it inside the cache directory.
+        val name = SafeFilename.sanitize(displayName(uri) ?: "") ?: "file"
+        val target = File(directory, SafeFilename.unique(directory, name))
+
+        val copied = runCatching {
+            contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            } ?: error("the provider returned no stream")
+        }
+        if (copied.isFailure) {
+            ConnectionRepository.onOutgoingFileResult(false, "Could not read the file")
+            return@withContext
+        }
+
+        val offered = runCatching {
+            sessionCoordinator.offer(target, TransferIds.next(sessionCoordinator.progress.keys))
+        }
+        if (offered.isFailure) {
+            ConnectionRepository.onOutgoingFileResult(false, "Could not start the transfer")
+        } else {
+            ConnectionRepository.onOutgoingFileResult(true, null)
+        }
+    }
+
+    private fun displayName(uri: android.net.Uri): String? =
+        runCatching {
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+            }
+        }.getOrNull()
 
     private fun startConnection() {
         if (connectJob?.isActive == true) return
@@ -349,6 +407,8 @@ class ConnectionService : Service() {
         const val ACTION_CONNECT = "kr.jjw.graft.CONNECT"
         const val ACTION_DISCONNECT = "kr.jjw.graft.DISCONNECT"
         const val PREFS = "graft-peer"
+        const val ACTION_SEND_FILE = "kr.jjw.graft.action.SEND_FILE"
+        const val EXTRA_URI = "uri"
         private const val CHANNEL_ID = "graft-connection"
         const val NOTIFICATION_ID = 1
 
@@ -380,6 +440,15 @@ class ConnectionService : Service() {
             val envelope = instance?.clipboard?.outgoing(text) ?: return
             client.send(envelope)
             ConnectionRepository.onSubmitClipboard(text)
+        }
+
+        /** Asks the service to offer a document to the Mac. */
+        fun sendFile(context: Context, uri: android.net.Uri) {
+            val intent = Intent(context, ConnectionService::class.java).apply {
+                action = ACTION_SEND_FILE
+                putExtra(EXTRA_URI, uri)
+            }
+            context.startForegroundService(intent)
         }
 
         fun stop(context: Context) {
