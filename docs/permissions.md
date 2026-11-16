@@ -4,10 +4,16 @@ Graft requests only the permissions its features need. This document explains wh
 
 > Status: onboarding screens implement these prompts. Denials are handled as described below; the app never crashes on a denied permission.
 
+## Notification allow list
+
+Forwarding starts empty. Open the app's notification screen, grant notification access in system
+settings, then tick the apps you want. Only ticked apps are forwarded, and the choice is stored on
+the phone only.
+
 | Platform | Permission | Why it is needed | If denied |
 |---|---|---|---|
 | macOS | Local network | Device discovery (Bonjour) and connections | Devices are not discovered; manual IP entry still works |
-| Android | Notification access | Forward phone notifications to the Mac | Only the notification feature is disabled |
+| Android | Notification access | Forward phone notifications to the Mac | Only the notification feature is disabled; the app says so in its notification screen |
 | Android | Camera | Scan the pairing QR code | Pair with the six-digit code instead |
 | Android | Notifications (Android 13+) | Show connection state and incoming notifications | Connection state is only visible inside the app |
 | Android | Battery optimization exemption (optional) | Keep the connection alive in the background | The connection may drop when the screen turns off |

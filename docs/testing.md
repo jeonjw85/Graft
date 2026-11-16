@@ -107,6 +107,19 @@ is a paired peer. Both sides verify SHA-256 before the file is committed.
 - [ ] A file named `../../evil.sh` is refused with no file written.
 - [ ] A hash mismatch leaves no file behind.
 
+## Background connection and notifications
+
+```bash
+export ANDROID_HOME=$HOME/Library/Android/sdk
+adb shell dumpsys activity services kr.jjw.graft | grep -E 'ConnectionService|isForeground|foregroundServiceType'
+adb shell dumpsys package kr.jjw.graft | grep -i notification
+```
+
+On the phone: open Graft, finish onboarding, tap "Keep connected in the background", then lock the
+screen and confirm the Mac stays connected. Grant notification access in system settings, tick one
+app on the notification screen, and confirm its alerts appear in the Mac menu with the app name as
+the title.
+
 ## Before a release
 
 - [ ] All automated tests pass
