@@ -22,6 +22,14 @@ interface FileReceiving {
     fun cancel()
 
     val confirmedBytes: Long
+
+    /**
+     * Where the finished file lives: a content URI on Android, an absolute path elsewhere.
+     *
+     * Null until the transfer commits, and always null for a receiver that cannot report it.
+     */
+    val destination: String?
+        get() = null
 }
 
 /** Creates a receiver for a given file name. */
@@ -31,17 +39,28 @@ fun interface FileReceivingFactory {
 
 /** Adapter that exposes [FileReceiver] through the interface. */
 class DirectoryFileReceiving(private val receiver: FileReceiver) : FileReceiving {
-    override fun begin(offer: FileOffer, resumeOffset: Long): Long =
-        receiver.begin(offer, resumeOffset)
+    private var committedPath: String? = null
+
+    override fun begin(offer: FileOffer, resumeOffset: Long): Long {
+        committedPath = null
+        return receiver.begin(offer, resumeOffset)
+    }
 
     override fun write(frame: BinaryFrame) = receiver.write(frame)
 
     override fun finish(expectedSha256: String): Boolean =
-        runCatching { receiver.finish(expectedSha256) }.isSuccess
+        runCatching { receiver.finish(expectedSha256) }
+            .onSuccess { committedPath = it.absolutePath }
+            .isSuccess
 
-    override fun cancel() = receiver.cancel()
+    override fun cancel() {
+        committedPath = null
+        receiver.cancel()
+    }
 
     override val confirmedBytes: Long get() = receiver.confirmedBytes
+
+    override val destination: String? get() = committedPath
 
     companion object {
         fun factory(directory: java.io.File): FileReceivingFactory =

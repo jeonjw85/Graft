@@ -23,6 +23,9 @@ interface MediaStorePort {
     fun clearPending(handle: Any)
 
     fun delete(handle: Any)
+
+    /** The content URI of an inserted row, so a finished file can be opened later. */
+    fun locationOf(handle: Any): String?
 }
 
 /** Adapts a real [ContentResolver] to [MediaStorePort]. */
@@ -52,6 +55,8 @@ class ContentResolverMediaStorePort(private val resolver: ContentResolver) : Med
     override fun delete(handle: Any) {
         resolver.delete(handle as Uri, null, null)
     }
+
+    override fun locationOf(handle: Any): String? = (handle as? Uri)?.toString()
 }
 
 /**
@@ -71,6 +76,9 @@ class MediaStoreFileReceiver(
     private var written = 0L
 
     override val confirmedBytes: Long get() = written
+
+    override val destination: String?
+        get() = handle?.let { port.locationOf(it) }
 
     override fun begin(offer: FileOffer, resumeOffset: Long): Long {
         // MediaStore cannot append to a pending row across process restarts, so a resume starts

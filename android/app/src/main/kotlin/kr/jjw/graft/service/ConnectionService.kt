@@ -25,6 +25,7 @@ import kr.jjw.graft.core.identity.DeviceIdentity
 import kr.jjw.graft.core.transport.ConnectionEvent
 import kr.jjw.graft.core.transport.GraftClient
 import kr.jjw.graft.core.transport.IdentityKeyManager
+import kr.jjw.graft.core.TransferDirection
 import kr.jjw.graft.core.transport.PinnedTrustManager
 import kr.jjw.graft.core.transport.PrefixTrustManager
 import kr.jjw.graft.core.identity.ManualPairingDecision
@@ -34,6 +35,8 @@ import kr.jjw.graft.data.AndroidKeyStoreBackend
 import kr.jjw.graft.data.PeerStore
 import kr.jjw.graft.files.DirectoryFileReceiving
 import kr.jjw.graft.files.TransferCoordinator
+import kr.jjw.graft.files.FallbackFileReceivingFactory
+import kr.jjw.graft.files.MediaStoreFileReceivingFactory
 import kr.jjw.graft.files.SafeFilename
 import kr.jjw.graft.files.TransferIds
 import kr.jjw.graft.ui.GraftActivity
@@ -208,9 +211,30 @@ class ConnectionService : Service() {
             isPaired = { true },
             sendControl = { envelope -> sessionClient.send(envelope) },
             sendBinary = { bytes -> sessionClient.sendBinary(bytes) },
-            receiversFactory = DirectoryFileReceiving.factory(directory),
+            receiversFactory = FallbackFileReceivingFactory.of(
+                primary = MediaStoreFileReceivingFactory.forResolver(contentResolver),
+                fallback = DirectoryFileReceiving.factory(directory),
+            ),
         )
         coordinator = sessionCoordinator
+
+        // A transfer is recorded once; the coordinator keeps its outcome in three maps.
+        val recordedTransfers = mutableSetOf<UInt>()
+        fun recordFinishedTransfers() {
+            val finished = sessionCoordinator.completed + sessionCoordinator.failures.keys
+            for (id in finished) {
+                if (!recordedTransfers.add(id)) continue
+                val progress = sessionCoordinator.progress[id]
+                ConnectionRepository.onTransferFinished(
+                    id = id,
+                    name = progress?.name ?: "file",
+                    bytes = progress?.total ?: progress?.confirmed ?: 0,
+                    direction = progress?.direction ?: TransferDirection.receive,
+                    error = sessionCoordinator.failures[id],
+                    destination = sessionCoordinator.locations[id],
+                )
+            }
+        }
 
         ConnectionRepository.onEvent(ConnectionEvent.Connecting)
         var outcome = Outcome.RETRY
@@ -247,11 +271,13 @@ class ConnectionService : Service() {
                         else -> Unit
                     }
                     ConnectionRepository.onTransferProgress(sessionCoordinator.progress)
+                    recordFinishedTransfers()
                 }
 
                 is ConnectionEvent.Binary -> {
                     sessionCoordinator.onBinary(event.data)
                     ConnectionRepository.onTransferProgress(sessionCoordinator.progress)
+                    recordFinishedTransfers()
                 }
 
                 is ConnectionEvent.Closed -> {

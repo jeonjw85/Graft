@@ -34,6 +34,8 @@ class MediaStoreFileReceiverTest {
 
         override fun openOutput(handle: Any) = sink
 
+        override fun locationOf(handle: Any): String? = "content://downloads/row-1"
+
         override fun clearPending(handle: Any) {
             pending = false
             cleared = true

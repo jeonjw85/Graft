@@ -56,6 +56,9 @@ class TransferCoordinator(
     val failures: MutableMap<UInt, TransferFailureKind> = mutableMapOf()
     val completed: MutableSet<UInt> = mutableSetOf()
 
+    /** Where each committed receive landed, for the row's Open action. */
+    val locations: MutableMap<UInt, String> = mutableMapOf()
+
     @Synchronized
     fun offer(file: File, transferId: UInt): FileOffer {
         require(senders[transferId] == null) { "transfer ${transferId} is already active" }
@@ -213,8 +216,8 @@ class TransferCoordinator(
         try {
             val ok = receiver.finish(expected)
             if (!ok) throw FileReceiverException(FileReceiverErrorKind.HASH_MISMATCH)
-            val file = receiver as? DirectoryFileReceiving
             completed.add(tid)
+            receiver.destination?.takeIf { it.isNotBlank() }?.let { locations[tid] = it }
             offers[tid]?.let { records?.remove(it.name, directory.path) }
             progress[tid] = TransferProgress(
                 name = offers[tid]?.name ?: "file",
