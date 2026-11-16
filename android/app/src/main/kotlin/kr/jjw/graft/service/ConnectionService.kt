@@ -474,6 +474,23 @@ class ConnectionService : Service() {
         @Volatile
         private var instance: ConnectionService? = null
 
+        /** Whether the app should connect as soon as it is opened. */
+        fun shouldConnect(context: Context): Boolean {
+            val prefs = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+            return kr.jjw.graft.ui.AppEntry.shouldConnect(
+                paired = isPaired(context),
+                prefix = prefs.getString("prefix", null),
+                token = prefs.getString("token", null),
+            )
+        }
+
+        /** True when a pairing offer is saved but not yet confirmed. */
+        fun hasPendingOffer(context: Context): Boolean {
+            val prefs = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+            return !prefs.getString("prefix", null).isNullOrEmpty() &&
+                !prefs.getString("token", null).isNullOrEmpty()
+        }
+
         /** True when a peer fingerprint is pinned, from either pairing path. */
         fun isPaired(context: Context): Boolean =
             context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)

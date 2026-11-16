@@ -30,9 +30,10 @@ fun AppRoot() {
         if (connection.status is ConnectionStatus.Connected) paired = true
     }
 
-    // A paired app reconnects on launch; making the user press Reconnect is not a feature.
+    // A paired app reconnects on launch, and a saved offer resumes: making the user press
+    // Reconnect is not a feature.
     LaunchedEffect(paired) {
-        if (paired) ConnectionService.start(context)
+        if (ConnectionService.shouldConnect(context)) ConnectionService.start(context)
     }
 
     if (AppEntry.startDestination(paired) == StartDestination.Onboarding) {

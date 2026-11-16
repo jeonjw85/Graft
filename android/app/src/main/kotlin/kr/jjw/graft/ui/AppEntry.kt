@@ -15,4 +15,13 @@ enum class StartDestination {
 object AppEntry {
     fun startDestination(paired: Boolean): StartDestination =
         if (paired) StartDestination.Main else StartDestination.Onboarding
+
+    /**
+     * Whether the connection service should start at launch.
+     *
+     * A saved manual offer (prefix + token) counts: the app can be killed between typing the code
+     * and the handshake finishing, and reopening it then used to do nothing at all.
+     */
+    fun shouldConnect(paired: Boolean, prefix: String?, token: String?): Boolean =
+        paired || (!prefix.isNullOrEmpty() && !token.isNullOrEmpty())
 }
