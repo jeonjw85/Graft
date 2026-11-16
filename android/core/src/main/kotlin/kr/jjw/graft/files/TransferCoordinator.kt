@@ -39,8 +39,9 @@ class TransferCoordinator(
     private val sendControl: (Envelope) -> Unit,
     private val sendBinary: (ByteArray) -> Unit,
     private val records: TransferRecordStore? = null,
+    private val receiversFactory: FileReceivingFactory = DirectoryFileReceiving.factory(directory),
 ) {
-    private val receivers = mutableMapOf<UInt, FileReceiver>()
+    private val receivers = mutableMapOf<UInt, FileReceiving>()
     private val senders = mutableMapOf<UInt, FileSender>()
     private val offers = mutableMapOf<UInt, FileOffer>()
 
@@ -140,7 +141,7 @@ class TransferCoordinator(
         offers[tid] = offer
 
         try {
-            val receiver = FileReceiver(directory)
+            val receiver = receiversFactory.create(name)
             // Resume from whatever a previous attempt left on disk, but only when a stored record
             // agrees; otherwise a leftover file from an unrelated transfer could be appended to.
             val onDisk = ResumeLookup.offset(directory, name, size)
@@ -207,11 +208,13 @@ class TransferCoordinator(
         val receiver = receivers[tid] ?: return
 
         try {
-            val file = receiver.finish(expected)
+            val ok = receiver.finish(expected)
+            if (!ok) throw FileReceiverException(FileReceiverErrorKind.HASH_MISMATCH)
+            val file = receiver as? DirectoryFileReceiving
             completed.add(tid)
             offers[tid]?.let { records?.remove(it.name, directory.path) }
             progress[tid] = TransferProgress(
-                name = file.name,
+                name = offers[tid]?.name ?: "file",
                 confirmed = offers[tid]?.size?.toLong() ?: 0,
                 total = offers[tid]?.size?.toLong() ?: 0,
                 direction = TransferDirection.receive,
@@ -237,7 +240,7 @@ class TransferCoordinator(
         senders.remove(tid)
     }
 
-    private fun recordProgress(tid: UInt, receiver: FileReceiver) {
+    private fun recordProgress(tid: UInt, receiver: FileReceiving) {
         val store = records ?: return
         val offer = offers[tid] ?: return
         store.upsert(
