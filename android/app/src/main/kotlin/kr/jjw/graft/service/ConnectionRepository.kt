@@ -15,6 +15,7 @@ data class ConnectionUiState(
     val transfers: Map<UInt, TransferProgress> = emptyMap(),
     val lastError: String? = null,
     val lastClipboard: String? = null,
+    val recentNotifications: List<kr.jjw.graft.notifications.PostedNotification> = emptyList(),
 )
 
 /**
@@ -24,6 +25,8 @@ data class ConnectionUiState(
  * the connection survive the screen turning off.
  */
 object ConnectionRepository {
+    private const val MAX_PENDING = 100
+
     private val _state = MutableStateFlow(ConnectionUiState())
     val state: StateFlow<ConnectionUiState> = _state.asStateFlow()
 
@@ -69,6 +72,29 @@ object ConnectionRepository {
     /** Records text the user asked to send, so the screen can show what was last shared. */
     fun onSubmitClipboard(text: String) {
         _state.update { it.copy(lastClipboard = text) }
+    }
+
+    private val pending = java.util.concurrent.ConcurrentLinkedQueue<kr.jjw.graft.notifications.PostedNotification>()
+
+    /**
+     * Queues a notification the listener accepted. It is drained when a connection is ready; the
+     * listener cannot reach the socket itself.
+     */
+    fun onNotification(notification: kr.jjw.graft.notifications.PostedNotification) {
+        if (pending.size >= MAX_PENDING) pending.poll()
+        pending.add(notification)
+        _state.update {
+            it.copy(recentNotifications = (listOf(notification) + it.recentNotifications).take(50))
+        }
+    }
+
+    /** Removes and returns everything queued for sending. */
+    fun takePendingNotifications(): List<kr.jjw.graft.notifications.PostedNotification> {
+        val drained = mutableListOf<kr.jjw.graft.notifications.PostedNotification>()
+        while (true) {
+            drained.add(pending.poll() ?: break)
+        }
+        return drained
     }
 
     fun onStopped() {

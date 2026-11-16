@@ -166,6 +166,7 @@ class ConnectionService : Service() {
 
                         "hello.ok" -> {
                             retryAttempt = 0
+                            flushPendingNotifications(sessionClient)
                             stored?.let { ConnectionRepository.onPeerPaired(it.name) }
                             updateNotification(stored?.name ?: "Connected")
                         }
@@ -197,6 +198,29 @@ class ConnectionService : Service() {
         // A flow that ends without a close event still means the socket is gone.
         if (!closed) outcome = Outcome.RETRY
         return outcome
+    }
+
+    /**
+     * Sends notifications the listener collected. The listener runs in its own process context and
+     * cannot reach the socket, so it queues here through the repository.
+     */
+    private fun flushPendingNotifications(sessionClient: GraftClient) {
+        for (notification in ConnectionRepository.takePendingNotifications()) {
+            sessionClient.send(
+                Envelope.create(
+                    "notification.posted",
+                    buildJsonObject {
+                        put("pkg", JsonPrimitive(notification.pkg))
+                        put("app", JsonPrimitive(notification.app))
+                        put("title", JsonPrimitive(notification.title))
+                        put("text", JsonPrimitive(notification.text))
+                        put("ts", JsonPrimitive(notification.postedAt))
+                        put("key", JsonPrimitive(notification.key))
+                        put("priority", JsonPrimitive(notification.priority))
+                    }
+                )
+            )
+        }
     }
 
     private fun stopConnection() {

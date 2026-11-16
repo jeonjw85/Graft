@@ -35,6 +35,11 @@ struct MenuContent: View {
                 TransferProgressView(service: service)
             }
 
+            if !service.recentNotifications.isEmpty {
+                Divider()
+                notificationsSection
+            }
+
             Divider()
 
             HStack {
@@ -53,6 +58,23 @@ struct MenuContent: View {
             Text(service.menuState.statusLabel)
                 .font(.headline)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var notificationsSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Recent alerts")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach(service.recentNotifications.prefix(5), id: \.postedAt) { item in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.app).font(.caption.bold())
+                    Text(item.title.isEmpty ? item.body : "\(item.title) — \(item.body)")
+                        .font(.caption)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 

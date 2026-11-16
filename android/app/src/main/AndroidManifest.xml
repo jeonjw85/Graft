@@ -25,6 +25,16 @@
         </activity>
 
         <service
+            android:name=".notifications.GraftNotificationListener"
+            android:exported="false"
+            android:label="Graft"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <service
             android:name=".service.ConnectionService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />

@@ -22,6 +22,7 @@ final class GraftService: ObservableObject {
     @Published private(set) var receiveDirectory: URL = GraftService.defaultReceiveDirectory()
     @Published var autoCopyClipboard = true
     @Published private(set) var lastSharedClipboard: String?
+    @Published private(set) var recentNotifications: [NotificationPresenter.Recent] = []
 
     private let port: UInt16
     private let store: PeerStore
@@ -34,6 +35,7 @@ final class GraftService: ObservableObject {
     private var coordinators: [ObjectIdentifier: TransferCoordinator] = [:]
     private var nextTransferId: UInt32 = 1
     private let clipboard = ClipboardBridge(writer: PasteboardWriter(), reader: PasteboardReader())
+    private let notifications = NotificationPresenter(port: SystemNotificationCenter())
 
     /// The most recent live connection, used for menu actions such as "Send clipboard".
     private var connection: TransportConnection?
@@ -232,6 +234,9 @@ final class GraftService: ObservableObject {
                 session.handle(envelope: envelope, now: self.clock())
                 self.coordinators[key]?.onControl(envelope)
                 self.handleClipboard(envelope)
+                if self.notifications.present(envelope) {
+                    self.recentNotifications = self.notifications.recent
+                }
                 self.syncTransfers()
                 self.publishState(for: session)
                 self.persistPairingIfNeeded()
