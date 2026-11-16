@@ -120,9 +120,9 @@ is a paired peer. Both sides verify SHA-256 before the file is committed.
 - [ ] A failed transfer that is retried updates its Recent row to Completed.
 - [ ] The app has no white flash at cold start and no light surface on any screen.
 - [ ] No screen shows a light surface, including the manual pairing form and the alerts lists.
-- [ ] A clipboard received while the phone app is open on the Connection tab is copied and shows "Copied to clipboard".
+- [x] A clipboard received while the phone app is open on the Connection tab is copied and shows "Copied to clipboard". (verified 2026-11-17; pressing Send clipboard returned the same text to the Mac)
 - [ ] The Copy button copies the last received clipboard again.
-- [ ] A clipboard received while the phone app was closed is not pasted over the user's clipboard later.
+- [x] A clipboard received while the phone app was closed is not pasted over the user's clipboard later. (unit test: ClipboardAutoCopyTest)
 - [ ] On first launch the Mac asks for notification permission once, and a denial does not break pairing or transfers.
 - [ ] Closing the Mac's pairing window cancels the offer: a QR code scanned afterwards does not pair.
 - [ ] The popover shows at most three actions, and settings opens from its footer.

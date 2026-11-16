@@ -117,6 +117,15 @@ object ConnectionRepository {
     private val pending = java.util.concurrent.ConcurrentLinkedQueue<kr.jjw.graft.notifications.PostedNotification>()
 
     /**
+     * Invoked when a notification is queued while a connection is live.
+     *
+     * Without this the queue only drained when a new session said hello, so an alert posted while
+     * already connected waited for a reconnect to reach the Mac.
+     */
+    @Volatile
+    var onPendingNotification: (() -> Unit)? = null
+
+    /**
      * Queues a notification the listener accepted. It is drained when a connection is ready; the
      * listener cannot reach the socket itself.
      */
@@ -126,6 +135,7 @@ object ConnectionRepository {
         _state.update {
             it.copy(recentNotifications = (listOf(notification) + it.recentNotifications).take(50))
         }
+        onPendingNotification?.invoke()
     }
 
     /** Removes and returns everything queued for sending. */

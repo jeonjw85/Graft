@@ -273,6 +273,10 @@ class ConnectionService : Service() {
                         "hello.ok" -> {
                             retryAttempt = 0
                             completeManualPairing(prefixTrust, offer)
+                            // Alerts that arrive while connected must go out immediately.
+                            ConnectionRepository.onPendingNotification = {
+                                flushPendingNotifications(sessionClient)
+                            }
                             flushPendingNotifications(sessionClient)
                             stored?.let { ConnectionRepository.onPeerPaired(it.name) }
                             updateNotification(stored?.name ?: "Connected")
@@ -316,6 +320,7 @@ class ConnectionService : Service() {
             }
         }
 
+        ConnectionRepository.onPendingNotification = null
         sessionCoordinator.cancelAll()
         sessionClient.close()
         client = null

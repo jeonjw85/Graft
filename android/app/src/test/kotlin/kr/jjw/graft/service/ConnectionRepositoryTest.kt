@@ -36,6 +36,28 @@ class ConnectionRepositoryTest {
     }
 
     @Test
+    fun `a queued notification wakes the sender`() {
+        var woken = 0
+        ConnectionRepository.onPendingNotification = { woken += 1 }
+
+        ConnectionRepository.onNotification(
+            kr.jjw.graft.notifications.PostedNotification(
+                pkg = "com.example",
+                app = "Example",
+                title = "Title",
+                text = "Text",
+                postedAt = 1,
+                key = "key",
+                priority = "normal",
+            )
+        )
+
+        assertEquals(1, woken, "a live connection must send without waiting for a reconnect")
+        assertEquals(1, ConnectionRepository.takePendingNotifications().size)
+        ConnectionRepository.onPendingNotification = null
+    }
+
+    @Test
     fun `a reset forgets both clipboard sides`() {
         ConnectionRepository.onClipboardReceived("from mac")
         ConnectionRepository.onSubmitClipboard("from phone")

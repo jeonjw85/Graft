@@ -13,6 +13,7 @@ struct Arguments {
     var sendPath: String?
     var receiveDir: String?
     var numeric = false
+    var clipboardText: String?
 }
 
 func parseArguments() -> Arguments {
@@ -34,6 +35,8 @@ func parseArguments() -> Arguments {
             if let value = iterator.next() { arguments.receiveDir = value }
         case "--numeric":
             arguments.numeric = true
+        case "--clipboard":
+            if let value = iterator.next() { arguments.clipboardText = value }
         default:
             continue
         }
@@ -73,6 +76,7 @@ do {
         // Frames are queued; a close that runs immediately after a send can drop the frame, so the
         // close is deferred until the last send is handed to the network stack.
         var pendingSends = 0
+        var sentClipboard = false
         let session = ConnectionSession(
             service: service,
             send: { envelope in
@@ -121,9 +125,39 @@ do {
             coordinator.onControl(envelope)
 
 
+            if envelope.type == "clipboard.update" {
+                let payload = envelope.payload.objectValue ?? [:]
+                print("CLIPBOARD \(payload["body"]?.stringValue ?? "")")
+            }
+
+            if envelope.type == "notification.posted" {
+                // Device checks read this line to prove the phone forwarded an alert.
+                let payload = envelope.payload.objectValue ?? [:]
+                print(
+                    "NOTIFICATION app=\(payload["app"]?.stringValue ?? "?") " +
+                    "title=\(payload["title"]?.stringValue ?? "") " +
+                    "text=\(payload["text"]?.stringValue ?? "")"
+                )
+            }
+
             // Auto-offer the requested file once the peer is ready, so the e2e test does not need
             // a human to press a button.
             if envelope.type == "hello.ok" || envelope.type == "pair.ok" || envelope.type == "hello" {
+                // One clipboard message per connection is enough for a device check.
+                if let text = arguments.clipboardText, !sentClipboard {
+                    sentClipboard = true
+                    try? connection.send(
+                        Envelope(
+                            type: "clipboard.update",
+                            payload: .object([
+                                "kind": .string("text"),
+                                "body": .string(text),
+                                "ts": .number(1)
+                            ])
+                        )
+                    )
+
+                }
                 if let path = arguments.sendPath, coordinator.progress.isEmpty {
                     try? coordinator.offer(url: URL(fileURLWithPath: path), transferId: transferId)
                     transferId += 1
