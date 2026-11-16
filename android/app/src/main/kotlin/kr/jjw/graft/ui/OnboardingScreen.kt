@@ -33,6 +33,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kr.jjw.graft.clipboard.ClipboardAutoCopy
 
 class GraftActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -283,6 +287,38 @@ fun OnboardingScreen(viewModel: OnboardingViewModel) {
                 connection.outgoingError?.let {
                     Spacer(Modifier.height(8.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+
+                val lifecycleState by LocalLifecycleOwner.current.lifecycle
+                    .currentStateFlow.collectAsStateWithLifecycle()
+                val autoCopy = remember { ClipboardAutoCopy() }
+                val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+                var copiedNow by remember { mutableStateOf<String?>(null) }
+
+                androidx.compose.runtime.LaunchedEffect(
+                    connection.lastClipboard,
+                    connection.lastClipboardAt,
+                    lifecycleState,
+                ) {
+                    val text = connection.lastClipboard ?: return@LaunchedEffect
+                    val focused = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+                    val shouldCopy = autoCopy.shouldCopy(
+                        text = text,
+                        arrivedAtMillis = connection.lastClipboardAt,
+                        hasFocus = focused,
+                        nowMillis = System.currentTimeMillis(),
+                    )
+                    if (shouldCopy) {
+                        clipboard.setPrimaryClip(
+                            android.content.ClipData.newPlainText("Graft", text)
+                        )
+                        copiedNow = text
+                    }
+                }
+
+                copiedNow?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Copied to clipboard", style = MaterialTheme.typography.bodySmall)
                 }
 
                 val derived = ConnectedScreenState.from(connection)
