@@ -89,6 +89,9 @@ is a paired peer. Both sides verify SHA-256 before the file is committed.
 
 - [ ] First launch generates a certificate and shows a QR code within two seconds.
 - [ ] Scanning the QR code pairs without any certificate warning.
+- [ ] A second scan of the same QR code does not start a second pairing.
+- [ ] A QR code that is not a Graft code shows a message instead of doing nothing.
+- [ ] Denying the camera permission switches the screen to the manual form.
 - [ ] Using the same QR code on a second phone fails.
 - [ ] Leaving the QR code open for more than 120 seconds makes pairing fail.
 - [ ] Changing the Mac's certificate (delete the peer and re-pair) makes the old pin fail with a clear message.
@@ -102,6 +105,11 @@ is a paired peer. Both sides verify SHA-256 before the file is committed.
 - [ ] The macOS app shows a menu bar icon at launch and binds port 47800 (verify with `lsof -nP -iTCP:47800 -sTCP:LISTEN`).
 - [ ] Pairing a real phone from the menu window stores the peer in `~/Library/Application Support/Graft/peers.json`.
 - [ ] Restarting the Mac app keeps the peer listed and reconnects without a new scan.
+- [ ] Sending a file from the phone shows progress and lands in the Mac's downloads folder.
+- [ ] Sending a file while disconnected shows "Connect to your Mac first" instead of failing silently.
+- [ ] A clipboard received while the phone app is open is copied and shows "Copied to clipboard".
+- [ ] A clipboard received while the phone app was closed is not pasted over the user's clipboard later.
+- [ ] On first launch the Mac asks for notification permission once, and a denial does not break pairing or transfers.
 - [ ] The Android app shows the onboarding screen and blocks the Done step until notification access is granted.
 - [ ] Denying the camera permission falls back to the six-digit code form.
 - [ ] Sending a 100 MB file completes and the SHA-256 matches on both sides.

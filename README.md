@@ -12,11 +12,11 @@ An open-source tool that connects a Mac and an Android phone over the same Wi-Fi
 | Clipboard text sharing | Mac -> Android (automatic) | Working in dev builds |
 | Clipboard text sharing | Android -> Mac (app button) | Working in dev builds |
 | Notification display | Android -> Mac | Working in dev builds |
-| QR pairing and pinned TLS | Mac <-> Android | Transport done |
+| Pairing: QR scan, or code + fingerprint | Mac <-> Android | Working in dev builds |
 
 Graft does not send Mac notifications to Android, because macOS has no public API for reading other apps' notifications. See the [threat model](docs/threat-model.md) for details.
 
-Current state: pairing, file transfer, clipboard sharing, and Android to Mac notification forwarding are implemented. The Android app now keeps its connection alive in the background.
+Current state: pairing, file transfer (both directions), clipboard sharing, and Android to Mac notification forwarding are implemented. The Android app scans the QR code, sends files, copies a received clipboard while it is open, and keeps its connection alive in the background.
 
 ## Requirements
 

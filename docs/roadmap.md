@@ -6,6 +6,7 @@
 | M1 Files | Bidirectional file transfer, resume, hash verification | A 1 GB transfer interrupted midway resumes and completes | Done in CI at 5 MiB; 1 GB manual run pending |
 | M2 Clipboard | Mac -> Android automatic, Android -> Mac on demand | Korean text and emoji survive a round trip | Wired; manual round trip pending |
 | M3 Notifications | Android -> Mac notifications, per-app allow list | Shown within one second, sensitive apps excluded by default | Implemented; device verification pending |
+| App UI | QR scanning, file sending, clipboard auto-copy, notification prompt | Working in dev builds |
 | M4 Release | DMG and APK, installation docs, v0.1.0 | Signed artifacts and installation instructions | Planned |
 
 ## M0 breakdown
