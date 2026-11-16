@@ -14,7 +14,7 @@ the phone only.
 |---|---|---|---|
 | macOS | Local network | Device discovery (Bonjour) and connections | Devices are not discovered; manual IP entry still works |
 | Android | Notification access | Forward phone notifications to the Mac | Only the notification feature is disabled; the app says so in its notification screen |
-| Android | Camera | Scan the pairing QR code | Pair with the six-digit code instead |
+| Android | Camera | Scan the pairing QR code | Pair with the code, fingerprint prefix, and IP instead |
 | Android | Notifications (Android 13+) | Show connection state and incoming notifications | Connection state is only visible inside the app |
 | Android | Battery optimization exemption (optional) | Keep the connection alive in the background | The connection may drop when the screen turns off |
 

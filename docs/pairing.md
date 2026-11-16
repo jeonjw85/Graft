@@ -27,7 +27,28 @@ graft://pair?v=1&h=<ip>&p=47800&fp=<SPKI-SHA256-base64url>&t=<token>&n=<device-n
 
 ## Manual fallback
 
-When the camera is unavailable or mDNS is blocked, the Mac also shows a six-digit code. Enter the code together with the Mac's IP address; the code follows the same 120-second lifetime and single-use rule.
+When the camera is unavailable or blocked, the Mac shows three values in its window:
+
+1. A six-digit code, for example `042 817`.
+2. The first eight characters of its certificate fingerprint, for example `Am_YijwV`.
+3. Its IP address and port.
+
+Enter all three on the phone. The phone performs the TLS handshake and computes the server
+certificate's full fingerprint; it accepts the Mac only when that fingerprint starts with the eight
+characters you typed. Eight base64url characters is 48 bits, so an impostor would need a certificate
+whose fingerprint collides with that prefix, which is infeasible on a local network.
+
+After a successful manual pairing the phone stores the **full** 43-character fingerprint and pins
+it, exactly as if the QR code had been scanned. The code is single use and expires after 120
+seconds.
+
+If a different Mac is already paired, a manual pairing does not silently replace it; the app stops
+and asks you to forget the existing device first.
+
+## Which flow should I use
+
+Use the QR code when the camera works: it carries the fingerprint, so there is nothing to compare by
+eye. Use the manual values when the camera is blocked or the lens is unavailable.<!-- manual:keep -->
 
 ## What pairing does not do
 

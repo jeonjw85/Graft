@@ -92,7 +92,9 @@ is a paired peer. Both sides verify SHA-256 before the file is committed.
 - [ ] Using the same QR code on a second phone fails.
 - [ ] Leaving the QR code open for more than 120 seconds makes pairing fail.
 - [ ] Changing the Mac's certificate (delete the peer and re-pair) makes the old pin fail with a clear message.
-- [ ] Entering the six-digit code with the IP address pairs when the camera is unavailable.
+- [ ] Manual pairing with the code, the eight-character fingerprint prefix, and the IP address succeeds when the camera is unavailable.
+- [ ] Manual pairing with a wrong fingerprint prefix fails before any pairing message is sent.
+- [ ] Manual pairing with a seven-character prefix is refused with a message naming eight characters.
 - [ ] Turning the Mac's Wi-Fi off and on reconnects within 60 seconds without a new pairing.
 
 ## Manual app checks
