@@ -50,6 +50,21 @@ final class TransferHistoryTests: XCTestCase {
         }
     }
 
+    func testTheSameIdUnderANewNameKeepsBothRows() {
+        history.record(id: 1, name: "photo.jpg", bytes: 10, direction: .receive, failure: nil)
+        history.record(id: 1, name: "cat.jpg", bytes: 20, direction: .receive, failure: nil)
+
+        XCTAssertEqual(history.records.map(\.name), ["cat.jpg", "photo.jpg"])
+    }
+
+    func testARetryOfTheSameFileReplacesItsRow() {
+        history.record(id: 1, name: "photo.jpg", bytes: 10, direction: .receive, failure: .wrongOffset)
+        history.record(id: 1, name: "photo.jpg", bytes: 10, direction: .receive, failure: nil)
+
+        XCTAssertEqual(history.records.count, 1)
+        XCTAssertNil(history.records.first?.failure)
+    }
+
     func testClearEmptiesTheList() {
         history.record(name: "a.bin", bytes: 1, direction: .receive, failure: nil)
         history.clear()

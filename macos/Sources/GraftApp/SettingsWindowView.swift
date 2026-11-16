@@ -61,7 +61,8 @@ struct NotificationsSettingsPage: View {
                     .font(.callout)
                     .foregroundStyle(Palette.onSurfaceVariant)
             } else {
-                List(service.recentNotifications.prefix(20), id: \.postedAt) { item in
+                // Alerts can arrive with no timestamp; index them so List identity stays unique.
+                List(Array(service.recentNotifications.prefix(20).enumerated()), id: \.offset) { _, item in
                     VStack(alignment: .leading, spacing: 1) {
                         Text(item.app).font(.caption.bold())
                         Text(item.title.isEmpty ? item.body : "\(item.title) — \(item.body)")
@@ -166,7 +167,7 @@ struct AboutSettingsPage: View {
             Divider()
 
             Text("Certificate fingerprint").font(.caption).foregroundStyle(Palette.onSurfaceVariant)
-            Text(service.localFingerprint)
+            Text(service.localFingerprint.isEmpty ? "Unavailable" : service.localFingerprint)
                 .font(.system(size: 12, design: .monospaced))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
@@ -175,6 +176,7 @@ struct AboutSettingsPage: View {
                 pasteboard.clearContents()
                 pasteboard.setString(service.localFingerprint, forType: .string)
             }
+            .disabled(service.localFingerprint.isEmpty)
 
             Divider()
 

@@ -39,8 +39,9 @@ public final class TransferHistory {
         failure: TransferFailure?
     ) -> MacTransferRecord {
         if let id {
-            // The same transfer is one row: a retry replaces, so an earlier failure does not stay.
-            rows.removeAll { $0.id == id }
+            // Transfer ids restart with every phone session, so a retry is the same id *and* the
+            // same file; a different file that happens to reuse the id keeps its own row.
+            rows.removeAll { $0.id == id && $0.name == name && $0.direction == direction }
         }
 
         let row = MacTransferRecord(

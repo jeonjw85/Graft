@@ -7,6 +7,13 @@ public struct TransferProgress: Equatable, Sendable {
     public let total: UInt64
     public let direction: TransferDirection
 
+    public init(name: String, confirmed: UInt64, total: UInt64, direction: TransferDirection) {
+        self.name = name
+        self.confirmed = confirmed
+        self.total = total
+        self.direction = direction
+    }
+
     public var fraction: Double {
         total == 0 ? 0 : Double(confirmed) / Double(total)
     }

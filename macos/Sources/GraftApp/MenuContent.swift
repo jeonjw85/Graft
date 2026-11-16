@@ -22,8 +22,18 @@ struct MenuContent: View {
 
             header
 
-            if service.menuState.canPair || service.menuState.status == .pairing {
+            if service.menuState.canPair {
                 pairingActions
+            } else if service.menuState.status == .pairing {
+                // A window is already open; starting again would invalidate the code on screen.
+                HStack {
+                    Text("Pairing window is open")
+                        .font(.caption)
+                        .foregroundStyle(Palette.onSurfaceVariant)
+                    Spacer()
+                    Button("Show window") { showPairingWindow() }
+                        .buttonStyle(.link)
+                }
             }
 
             peerList
@@ -57,12 +67,7 @@ struct MenuContent: View {
                     .foregroundStyle(Palette.onSurfaceVariant)
                     .textSelection(.enabled)
             }
-            if summary.showsError, let error = service.menuState.errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(Palette.error)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+
         }
     }
 
@@ -70,11 +75,11 @@ struct MenuContent: View {
         HStack(spacing: 8) {
             Button("Pair a phone") {
                 service.beginPairing()
-                openWindow(id: "pairing")
+                showPairingWindow()
             }
             Button("Pair without a camera") {
                 service.beginManualPairing()
-                openWindow(id: "pairing")
+                showPairingWindow()
             }
             .buttonStyle(.link)
         }
@@ -90,11 +95,21 @@ struct MenuContent: View {
                     .disabled(!service.menuState.isConnected)
             }
 
-            ForEach(Array(service.transfers.values).sorted { $0.name < $1.name }, id: \.name) { progress in
+            let summary = TransferSummary.from(
+                transfers: service.transfers,
+                finished: [],
+                failure: service.transferFailure
+            )
+            ForEach(summary.rows, id: \.id) { row in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(progress.name)
-                        .font(.caption)
-                    ProgressView(value: min(max(progress.fraction, 0), 1))
+                    HStack {
+                        Text(row.progress.name).font(.caption)
+                        Spacer()
+                        Text("\(percent(row.progress))%")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(Palette.onSurfaceVariant)
+                    }
+                    ProgressView(value: min(max(row.progress.fraction, 0), 1))
                         .controlSize(.small)
                 }
             }
@@ -143,6 +158,10 @@ struct MenuContent: View {
         }
     }
 
+    private func percent(_ progress: TransferProgress) -> Int {
+        progress.total == 0 ? 100 : Int(min(max(progress.fraction, 0), 1) * 100)
+    }
+
     private func chooseFile() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
@@ -154,6 +173,14 @@ struct MenuContent: View {
 
     /// `SettingsLink` is macOS 14+, and this app runs on 13.
     private func openSettings() {
+        NSApp.activate(ignoringOtherApps: true)
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    }
+
+    /// A menu bar app is not active by default, so a window opened from the popover can land behind
+    /// the front app. Activate before showing it.
+    private func showPairingWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: "pairing")
     }
 }

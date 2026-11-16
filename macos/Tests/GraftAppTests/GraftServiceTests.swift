@@ -32,6 +32,22 @@ final class GraftServiceTests: XCTestCase {
         XCTAssertEqual(service.menuState.status, .pairing)
     }
 
+    func testUsingTheQRCodeAgainClearsTheTypedValues() throws {
+        let port = try occupyFreePort()
+        close(port.socket)
+        let service = GraftService(port: port.number, storeURL: temporaryStoreURL())
+        try service.start()
+        defer { service.stop() }
+
+        service.beginManualPairing()
+        XCTAssertNotNil(service.manualPairing)
+
+        service.beginPairing()
+
+        XCTAssertNil(service.manualPairing, "a stale code must not stay on screen")
+        XCTAssertNotNil(service.qrImage)
+    }
+
     func testForgetPeerRemovesItFromTheStore() throws {
         let url = temporaryStoreURL()
         let store = PeerStore(url: url)

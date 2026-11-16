@@ -19,6 +19,8 @@ struct PairingViewState {
 /// Closing the window revokes the token, so an offer never outlives the window that showed it.
 struct PairingWindowView: View {
     @ObservedObject var service: GraftService
+    @State private var window: NSWindow?
+    @State private var revoker: WindowCloseRevoker?
 
     var body: some View {
         VStack(spacing: 16) {
@@ -27,7 +29,24 @@ struct PairingWindowView: View {
             } else if let image = service.qrImage {
                 qr(image)
             } else {
-                ProgressView("Preparing the pairing offer…")
+                let message = PairingWindowState.message(
+                    hasQR: false,
+                    hasManual: false,
+                    status: service.menuState.status
+                )
+                VStack(spacing: 8) {
+                    if message == "Paired." {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundStyle(Palette.connected)
+                    } else {
+                        ProgressView()
+                    }
+                    Text(message ?? "")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Palette.onSurfaceVariant)
+                }
+                .frame(maxWidth: .infinity, minHeight: 220)
             }
 
             Divider()
@@ -51,6 +70,20 @@ struct PairingWindowView: View {
         .padding(24)
         .frame(minWidth: 420, minHeight: 560)
         .background(Palette.background)
+        .background(
+            WindowAccessor { window in
+                self.window = window
+                if revoker == nil {
+                    // Closing the window must kill the offer; onDisappear is not called for a
+                    // Window scene, so observe the AppKit close instead.
+                    revoker = WindowCloseRevoker(window: window) { service.cancelPairing() }
+                }
+                window.makeKeyAndOrderFront(nil)
+            }
+        )
+        .onChange(of: service.menuState.isConnected) { connected in
+            if connected { window?.close() }
+        }
         .onDisappear { service.cancelPairing() }
     }
 

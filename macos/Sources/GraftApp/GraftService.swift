@@ -22,7 +22,8 @@ final class GraftService: ObservableObject {
     @Published private(set) var transferHistory: [MacTransferRecord] = []
 
     private let history = TransferHistory()
-    private var recordedOutcomes: [UInt32: TransferFailure?] = [:]
+    private var recordedOutcomes: [String: TransferFailure?] = [:]
+    private var lastTransferSucceeded = false
     @Published private(set) var transferFailure: String?
     @Published private(set) var receiveDirectory: URL = GraftService.defaultReceiveDirectory()
     @Published var autoCopyClipboard = true
@@ -41,7 +42,7 @@ final class GraftService: ObservableObject {
     private var server: TransportServer?
     private var advertiser: BonjourAdvertiser?
     private var sessions: [ObjectIdentifier: ConnectionSession] = [:]
-    private var coordinators: [ObjectIdentifier: TransferCoordinator] = [:]
+    private let coordinators = CoordinatorPool()
     private var nextTransferId: UInt32 = 1
     private let clipboard = ClipboardBridge(writer: PasteboardWriter(), reader: PasteboardReader())
     private let notifications = NotificationPresenter(
@@ -216,6 +217,7 @@ final class GraftService: ObservableObject {
         server?.stop()
         server = nil
         recordedOutcomes.removeAll()
+        lastTransferSucceeded = false
         history.clear()
         transferHistory = []
     }
@@ -231,7 +233,11 @@ final class GraftService: ObservableObject {
     // MARK: - Pairing
 
     func beginPairing() {
-        guard let pairingService, let server, let assignedPort = server.port else { return }
+        guard let pairingService, let server, let assignedPort = server.port else {
+            menuState = MenuState(status: .failed(message: "Pairing is not available yet"), peerName: nil)
+            return
+        }
+        manualPairing = nil
 
         let result = pairingService.beginPairing(
             now: clock(),
@@ -247,7 +253,12 @@ final class GraftService: ObservableObject {
 
     /// Starts a pairing window that does not need a camera and publishes the typed values.
     func beginManualPairing() {
-        guard let pairingService, let server, let assignedPort = server.port else { return }
+        guard let pairingService, let server, let assignedPort = server.port else {
+            menuState = MenuState(status: .failed(message: "Pairing is not available yet"), peerName: nil)
+            return
+        }
+        pairingURI = nil
+        qrImage = nil
 
         let pairing = pairingService.beginNumericPairing(
             now: clock(),
@@ -318,13 +329,13 @@ final class GraftService: ObservableObject {
             sendBinary: { [weak connection] data in try? connection?.sendBinary(data) },
             records: TransferRecordStore(file: Self.defaultRecordStoreURL())
         )
-        coordinators[key] = coordinator
+        coordinators.insert(coordinator, for: key)
 
         connection.receive { [weak self] envelope in
             Task { @MainActor in
                 guard let self, let session = self.sessions[key] else { return }
                 session.handle(envelope: envelope, now: self.clock())
-                self.coordinators[key]?.onControl(envelope)
+                self.coordinators.coordinator(for: key)?.onControl(envelope)
                 self.handleClipboard(envelope)
                 if self.notifications.present(envelope) {
                     self.recentNotifications = self.notifications.recent
@@ -338,7 +349,7 @@ final class GraftService: ObservableObject {
         connection.receiveBinary { [weak self] data in
             Task { @MainActor in
                 guard let self else { return }
-                self.coordinators[key]?.onBinary(data)
+                self.coordinators.coordinator(for: key)?.onBinary(data)
                 self.syncTransfers()
             }
         }
@@ -359,6 +370,8 @@ final class GraftService: ObservableObject {
             publishState(for: session)
             if session.phase == .closing {
                 sessions.removeValue(forKey: key)
+                // A coordinator outliving its session would look connected but send nowhere.
+                coordinators.remove(key)
             }
         }
         refreshPairingState(now: now)
@@ -425,7 +438,7 @@ final class GraftService: ObservableObject {
 
     @discardableResult
     func sendFile(url: URL) -> Bool {
-        guard let coordinator = coordinators.values.first else {
+        guard let coordinator = coordinators.all.first, connection != nil else {
             transferFailure = "Connect a phone first"
             return false
         }
@@ -443,14 +456,24 @@ final class GraftService: ObservableObject {
 
     private func syncTransfers() {
         var merged: [UInt32: TransferProgress] = [:]
-        for coordinator in coordinators.values {
-            merged.merge(coordinator.progress) { current, _ in current }
-            if let failure = coordinator.failures.values.first {
-                transferFailure = Self.describe(failure)
-            }
+        var failureMessage: String?
+
+        for coordinator in coordinators.all {
             recordFinishedTransfers(coordinator)
+            let finished = coordinator.completed.union(coordinator.failures.keys)
+            merged.merge(coordinator.progress.filter { !finished.contains($0.key) }) { current, _ in current }
+            if let failure = coordinator.failures.values.first {
+                failureMessage = Self.describe(failure)
+            }
         }
+
         transfers = merged
+        // A success after a failure clears the banner; an error only stands while it is the latest
+        // outcome and nothing is in flight.
+        if lastTransferSucceeded || !merged.isEmpty {
+            failureMessage = nil
+        }
+        transferFailure = failureMessage
         transferHistory = history.records
     }
 
@@ -458,13 +481,16 @@ final class GraftService: ObservableObject {
     private func recordFinishedTransfers(_ coordinator: TransferCoordinator) {
         for id in coordinator.completed.union(coordinator.failures.keys) {
             let failure = coordinator.failures[id]
-            if recordedOutcomes.keys.contains(id), recordedOutcomes[id]! == failure { continue }
-            recordedOutcomes[id] = .some(failure)
-
             let progress = coordinator.progress[id]
+            let name = progress?.name ?? "File"
+            let key = "\(id)|\(name)|\(progress?.direction.rawValue ?? "receive")"
+            if recordedOutcomes.keys.contains(key), recordedOutcomes[key]! == failure { continue }
+            recordedOutcomes[key] = .some(failure)
+            lastTransferSucceeded = failure == nil
+
             history.record(
                 id: id,
-                name: progress?.name ?? "File",
+                name: name,
                 bytes: progress?.total ?? 0,
                 direction: progress?.direction ?? .receive,
                 failure: failure
