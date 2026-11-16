@@ -121,6 +121,11 @@ is a paired peer. Both sides verify SHA-256 before the file is committed.
 - [ ] The Copy button copies the last received clipboard again.
 - [ ] A clipboard received while the phone app was closed is not pasted over the user's clipboard later.
 - [ ] On first launch the Mac asks for notification permission once, and a denial does not break pairing or transfers.
+- [ ] Closing the Mac's pairing window cancels the offer: a QR code scanned afterwards does not pair.
+- [ ] The popover shows at most three actions, and settings opens from its footer.
+- [ ] Settings > Transfers lists a finished transfer with its direction, size, and reason.
+- [ ] Settings > About shows the same 43-character fingerprint the phone displays.
+- [ ] The Mac app has no light window, including the pairing and settings windows.
 - [ ] The Android app shows the onboarding screen on first launch, and skipping notification access still reaches the scan step.
 - [ ] Denying the camera permission falls back to the six-digit code form.
 - [ ] Sending a 100 MB file completes and the SHA-256 matches on both sides.

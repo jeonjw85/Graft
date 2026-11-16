@@ -16,6 +16,11 @@ An open-source tool that connects a Mac and an Android phone over the same Wi-Fi
 
 Graft does not send Mac notifications to Android, because macOS has no public API for reading other apps' notifications. See the [threat model](docs/threat-model.md) for details.
 
+On the Mac, the menu bar popover shows the link state and three actions (pair, send a file, send
+clipboard). Pairing and settings live in their own windows: pairing shows the QR code or the typed
+values and closes with the offer, and settings holds notifications, clipboard, transfer history, and
+an About page with the fingerprint. Both apps use the same dark appearance.
+
 The Android app opens on a three-tab layout once a phone is paired: **Connection** (link state,
 pairing, clipboard), **Files** (send, progress, recent transfers with an Open action), and **Alerts**
 (notification access, allowed apps, recent forwards). It has a single dark appearance by design.

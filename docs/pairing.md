@@ -45,6 +45,12 @@ seconds.
 If a different Mac is already paired, a manual pairing does not silently replace it; the app stops
 and asks you to forget the existing device first.
 
+## On the Mac
+
+Pairing opens in its own window from the popover. The window shows either the QR code or the three
+typed values, and closing it revokes the offer immediately — the 120-second lifetime is an upper
+bound, not the only stop.
+
 ## In the Android app
 
 Reach pairing from onboarding (first run) or from **Connection → Pair another phone**. Both show the
