@@ -46,9 +46,11 @@ class ClipboardBridgeTest {
     }
 
     @Test
-    fun `empty clipboard produces no envelope`() {
+    fun `empty clipboard produces no envelope and says why`() {
         assertNull(bridge.outgoing(null))
+        assertEquals("Clipboard has no text to send", bridge.error())
         assertNull(bridge.outgoing(""))
+        assertEquals("Clipboard has no text to send", bridge.error())
     }
 
     @Test

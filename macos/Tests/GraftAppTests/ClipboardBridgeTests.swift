@@ -58,9 +58,11 @@ final class ClipboardBridgeTests: XCTestCase {
         XCTAssertNotNil(bridge.lastError)
     }
 
-    func testEmptyClipboardProducesNoEnvelope() {
+    func testEmptyClipboardProducesNoEnvelopeAndSaysWhy() {
         let bridge = ClipboardBridge(writer: FakeWriter(), reader: FakeReader(value: nil))
+
         XCTAssertNil(bridge.outgoing())
+        XCTAssertEqual(bridge.lastError, "There is no text on the clipboard")
     }
 
     func testOutgoingCarriesKindBodyAndTimestamp() throws {

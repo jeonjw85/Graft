@@ -514,11 +514,15 @@ class ConnectionService : Service() {
         }
 
         /** Sends the given clipboard text; the caller reads the clipboard while it has focus. */
-        fun sendClipboard(text: String) {
-            val client = instance?.client ?: return
-            val envelope = instance?.clipboard?.outgoing(text) ?: return
+        /** Sends clipboard text and returns a user-facing reason when it could not be sent. */
+        fun sendClipboard(text: String?): String? {
+            val service = instance ?: return "Connect to your Mac first"
+            val client = service.client ?: return "Connect to your Mac first"
+            val envelope = service.clipboard.outgoing(text)
+                ?: return service.clipboard.error() ?: "Clipboard has no text to send"
             client.send(envelope)
-            ConnectionRepository.onSubmitClipboard(text)
+            ConnectionRepository.onSubmitClipboard(text.orEmpty())
+            return null
         }
 
         /** Asks the service to offer a document to the Mac. */

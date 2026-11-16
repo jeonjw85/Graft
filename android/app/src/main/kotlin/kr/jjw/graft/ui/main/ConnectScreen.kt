@@ -148,6 +148,7 @@ private fun ClipboardCard(received: String?, receivedAt: Long, sent: String?) {
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow
         .collectAsStateWithLifecycle()
     var copied by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
 
     // Writing to the clipboard is only allowed while this app is focused, and only makes sense
     // right after the text arrives.
@@ -199,11 +200,18 @@ private fun ClipboardCard(received: String?, receivedAt: Long, sent: String?) {
                         ?.getItemAt(0)
                         ?.coerceToText(context)
                         ?.toString()
-                    if (!text.isNullOrEmpty()) ConnectionService.sendClipboard(text)
+                    message = ConnectionService.sendClipboard(text)
                 }
             ) {
                 Text("Send clipboard")
             }
+        }
+        message?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = GraftPalette.warning,
+            )
         }
         sent?.let {
             Text(

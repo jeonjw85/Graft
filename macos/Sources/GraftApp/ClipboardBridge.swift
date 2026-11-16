@@ -45,7 +45,10 @@ final class ClipboardBridge {
 
     /// Builds an envelope for the current clipboard, or nil when there is no text.
     func outgoing(now: Date = Date()) -> Envelope? {
-        guard let text = reader.read(), !text.isEmpty else { return nil }
+        guard let text = reader.read(), !text.isEmpty else {
+            lastError = "There is no text on the clipboard"
+            return nil
+        }
         guard text.utf8.count <= Self.maxBytes else {
             lastError = "Clipboard text is larger than 256 KiB and was not sent"
             return nil

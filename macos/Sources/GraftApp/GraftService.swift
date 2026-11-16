@@ -496,7 +496,7 @@ final class GraftService: ObservableObject {
 
     func sendClipboard() {
         guard let envelope = clipboard.outgoing() else {
-            transferFailure = "There is no text on the clipboard"
+            transferFailure = clipboard.lastError ?? "There is no text on the clipboard"
             return
         }
         try? connection?.send(envelope)

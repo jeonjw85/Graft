@@ -33,7 +33,10 @@ class ClipboardBridge {
 
     /** Builds an envelope for [text], or null when it is empty or too large to send. */
     fun outgoing(text: String?, now: Long = System.currentTimeMillis()): Envelope? {
-        if (text.isNullOrEmpty()) return null
+        if (text.isNullOrEmpty()) {
+            lastError = "Clipboard has no text to send"
+            return null
+        }
         if (text.toByteArray(Charsets.UTF_8).size > MAX_BYTES) {
             lastError = "Clipboard text is larger than 256 KiB and was not sent"
             return null
