@@ -31,6 +31,19 @@ public final class PairingService: @unchecked Sendable {
         self.tokens = tokens
     }
 
+    /// Removes a paired phone from the TLS allow list and from the pending-persist record.
+    ///
+    /// Without this, "Forget" only edited the app's own list: the TLS layer kept admitting the
+    /// phone and the next message re-added it from `lastPairedPeer`.
+    public func forget(fingerprint: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        pairedFingerprints.remove(fingerprint)
+        if lastPairedPeer?.fingerprint == fingerprint {
+            lastPairedPeer = nil
+        }
+    }
+
     /// Drops the current offer. Used when the pairing window closes: the token must die with it.
     public func revokePairing() {
         lock.lock()

@@ -163,7 +163,9 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES
 ```
 
-The ad-hoc signing flags are required: an unsigned runner is killed before it connects. If the run
+Close any running Graft instance first: a second copy cannot bind port 47800 and pairing will
+report that the offer is unavailable. The ad-hoc signing flags are required: an unsigned runner is
+killed before it connects. If the run
 fails with `Timed out while enabling automation mode`, allow the terminal or Xcode under System
 Settings > Privacy & Security > Accessibility (or Automation), then run it again. The default
 `Graft` scheme excludes this test so unit tests stay runnable everywhere.

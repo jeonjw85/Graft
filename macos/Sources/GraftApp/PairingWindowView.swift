@@ -87,6 +87,8 @@ struct PairingWindowView: View {
             if revoker == nil {
                 revoker = WindowCloseRevoker(window: window) { service.cancelPairing() }
             }
+            // A menu bar-only app is not active, so a new window would open behind the front app.
+            NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
             return
         }

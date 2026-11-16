@@ -23,6 +23,7 @@ final class GraftService: ObservableObject {
 
     private let history = TransferHistory()
     private var recordedOutcomes: [String: TransferFailure?] = [:]
+    private var pairingGeneration = 0
     private var lastTransferSucceeded = false
     @Published private(set) var transferFailure: String?
     @Published private(set) var receiveDirectory: URL = GraftService.defaultReceiveDirectory()
@@ -238,6 +239,37 @@ final class GraftService: ObservableObject {
     // MARK: - Pairing
 
     func beginPairing() {
+        pairingGeneration += 1
+        let generation = pairingGeneration
+        guard pairingReady else {
+            // The server binds a moment after launch. A click that beats it must wait, not fail —
+            // otherwise the first thing a user sees is an error.
+            retryPairing(attempts: 10, generation: generation)
+            return
+        }
+        startPairingOffer()
+    }
+
+    private var pairingReady: Bool {
+        pairingService != nil && server?.port != nil
+    }
+
+    private func retryPairing(attempts: Int, generation: Int) {
+        guard attempts > 0 else {
+            menuState = MenuState(status: .failed(message: "Pairing is not available yet"), peerName: nil)
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self, self.pairingGeneration == generation else { return }
+            if self.pairingReady {
+                self.startPairingOffer()
+            } else {
+                self.retryPairing(attempts: attempts - 1, generation: generation)
+            }
+        }
+    }
+
+    private func startPairingOffer() {
         guard let pairingService, let server, let assignedPort = server.port else {
             menuState = MenuState(status: .failed(message: "Pairing is not available yet"), peerName: nil)
             return
@@ -258,6 +290,31 @@ final class GraftService: ObservableObject {
 
     /// Starts a pairing window that does not need a camera and publishes the typed values.
     func beginManualPairing() {
+        pairingGeneration += 1
+        let generation = pairingGeneration
+        guard pairingReady else {
+            retryManualPairing(attempts: 10, generation: generation)
+            return
+        }
+        startManualPairingOffer()
+    }
+
+    private func retryManualPairing(attempts: Int, generation: Int) {
+        guard attempts > 0 else {
+            menuState = MenuState(status: .failed(message: "Pairing is not available yet"), peerName: nil)
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self, self.pairingGeneration == generation else { return }
+            if self.pairingReady {
+                self.startManualPairingOffer()
+            } else {
+                self.retryManualPairing(attempts: attempts - 1, generation: generation)
+            }
+        }
+    }
+
+    private func startManualPairingOffer() {
         guard let pairingService, let server, let assignedPort = server.port else {
             menuState = MenuState(status: .failed(message: "Pairing is not available yet"), peerName: nil)
             return
@@ -280,6 +337,8 @@ final class GraftService: ObservableObject {
 
     /// Drops the current offer and returns the popover to its normal state.
     func cancelPairing() {
+        // A retry queued at launch must not resurrect the offer after the window closed.
+        pairingGeneration += 1
         pairingService?.revokePairing()
         pairingURI = nil
         qrImage = nil
@@ -298,10 +357,15 @@ final class GraftService: ObservableObject {
     }
 
     func forgetPeer(fingerprint: String) {
+        pairingService?.forget(fingerprint: fingerprint)
         try? store.remove(fingerprint: fingerprint)
         peers = store.load()
         if pendingPairedPeer?.fingerprint == fingerprint {
             pendingPairedPeer = nil
+        }
+        if connection?.peerFingerprint == fingerprint {
+            connection?.close()
+            connection = nil
         }
     }
 

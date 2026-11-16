@@ -71,17 +71,11 @@ struct MenuContent: View {
         }
     }
 
+    /// Pairing starts with the QR code; the typed values live inside the window.
     private var pairingActions: some View {
-        HStack(spacing: 8) {
-            Button("Pair a phone") {
-                service.beginPairing()
-                showPairingWindow()
-            }
-            Button("Pair without a camera") {
-                service.beginManualPairing()
-                showPairingWindow()
-            }
-            .buttonStyle(.link)
+        Button("Pair a phone") {
+            service.beginPairing()
+            showPairingWindow()
         }
     }
 
@@ -152,7 +146,13 @@ struct MenuContent: View {
 
     private var footer: some View {
         HStack {
-            Button("Settings…") { openSettings() }
+            if #available(macOS 14, *) {
+                // `showSettingsWindow:` stopped working on newer macOS; SettingsLink is the
+                // supported way and is a button in the popover.
+                SettingsLink { Text("Settings…") }
+            } else {
+                Button("Settings…") { openSettings() }
+            }
             Spacer()
             Button("Quit") { NSApplication.shared.terminate(nil) }
         }
@@ -171,7 +171,7 @@ struct MenuContent: View {
         _ = service.sendFile(url: url)
     }
 
-    /// `SettingsLink` is macOS 14+, and this app runs on 13.
+    /// The macOS 13 fallback; newer systems use `SettingsLink`.
     private func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)

@@ -11,6 +11,8 @@ final class PairingWindowUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launch()
+        // An LSUIElement app never becomes "foreground"; the status item wait below is the real
+        // readiness check.
     }
 
     override func tearDownWithError() throws {
@@ -29,6 +31,11 @@ final class PairingWindowUITests: XCTestCase {
         let window = app.windows["Pair with a phone"]
         XCTAssertTrue(window.waitForExistence(timeout: 5), "the pairing window must open")
 
+        // QR is the default state; the typed values sit behind the link.
+        let qrHint = app.staticTexts["Scan with your phone"]
+        XCTAssertTrue(qrHint.waitForExistence(timeout: 10), "the QR code must be shown first")
+        attachScreenshot("pairing-window")
+
         window.buttons[XCUIIdentifierCloseWindow].click()
 
         // Reopen the popover: a closed window must leave the app idle, not "Waiting for the phone".
@@ -37,17 +44,38 @@ final class PairingWindowUITests: XCTestCase {
         XCTAssertTrue(idle.waitForExistence(timeout: 5), popoverDump())
     }
 
+    func testSettingsOpensFromThePopover() throws {
+        let statusItem = try statusItem()
+        statusItem.click()
+
+        let settings = app.buttons["Settings…"].firstMatch
+        XCTAssertTrue(settings.waitForExistence(timeout: 5), popoverDump())
+        settings.click()
+
+        // The settings window has no stable title across macOS versions, so look for its content.
+        let notificationsTab = app.staticTexts["Notifications"].firstMatch
+        XCTAssertTrue(
+            notificationsTab.waitForExistence(timeout: 5),
+            "Settings must open: \(app.debugDescription)"
+        )
+        attachScreenshot("settings-window")
+    }
+
+    private func attachScreenshot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     private func statusItem() throws -> XCUIElement {
-        // A MenuBarExtra is a status item on the app's own menu bar in XCUITest.
-        let direct = app.menuBars.statusItems.firstMatch
-        if direct.waitForExistence(timeout: 3) {
-            return direct
+        // A MenuBarExtra is a status item on the app's own menu bar in XCUITest. Do not fall back to
+        // menuBarItems: on this system that matches the Apple menu and the click goes nowhere.
+        let item = app.menuBars.statusItems.firstMatch
+        guard item.waitForExistence(timeout: 15) else {
+            throw XCTSkip("the menu bar item is not exposed in this environment")
         }
-        let anyBar = app.menuBars.menuBarItems.firstMatch
-        if anyBar.waitForExistence(timeout: 2) {
-            return anyBar
-        }
-        throw XCTSkip("the menu bar item is not exposed in this environment")
+        return item
     }
 
     private func popoverDump() -> String {
