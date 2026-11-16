@@ -25,6 +25,28 @@ public final class DeviceIdentity {
     }
 
     public static func loadOrCreate(tag: String) throws -> DeviceIdentity {
+        try loadOrCreate(tag: tag, open: loadOrCreateOnce)
+    }
+
+    /// One retry after wiping the tag.
+    ///
+    /// A key an earlier build created may be unreadable now: the Keychain ACL follows the binary's
+    /// signature, so an unsigned development rebuild loses access, and a half-deleted item leaves a
+    /// key without its public half. Losing the identity costs one re-pair; a permanently failed app
+    /// costs the app.
+    static func loadOrCreate(
+        tag: String,
+        open: (String) throws -> DeviceIdentity
+    ) throws -> DeviceIdentity {
+        do {
+            return try open(tag)
+        } catch {
+            delete(tag: tag)
+            return try open(tag)
+        }
+    }
+
+    static func loadOrCreateOnce(tag: String) throws -> DeviceIdentity {
         let keychain = try defaultKeychain()
         let tagData = Data(tag.utf8)
 
