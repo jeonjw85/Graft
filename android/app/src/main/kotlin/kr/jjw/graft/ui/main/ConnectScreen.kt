@@ -2,6 +2,7 @@ package kr.jjw.graft.ui.main
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,6 +14,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,12 +26,16 @@ import kr.jjw.graft.service.ConnectionRepository
 import kr.jjw.graft.service.ConnectionService
 import kr.jjw.graft.service.ConnectionStatus
 import kr.jjw.graft.service.ConnectionUiState
+import kr.jjw.graft.clipboard.ClipboardAutoCopy
 import kr.jjw.graft.ui.components.SectionHeader
 import kr.jjw.graft.ui.components.StatusCard
 import kr.jjw.graft.ui.onboarding.PairingDialog
 import kr.jjw.graft.ui.theme.GraftPalette
 import kr.jjw.graft.ui.theme.GraftSpacing
 import kr.jjw.graft.ui.theme.StatusTone
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** What the status card says for a given connection snapshot. */
 data class ConnectVisual(val title: String, val detail: String?, val tone: StatusTone, val error: String?)
@@ -86,7 +92,15 @@ fun ConnectScreen(
             error = visual.error,
         )
 
-        Button(onClick = { pairingOpen = true }, modifier = Modifier.fillMaxWidth()) {
+        Button(
+            onClick = {
+                // A live session keeps the offer it captured at connect time, so adding a phone
+                // only takes effect after the current link is closed.
+                if (paired) ConnectionService.stop(context)
+                pairingOpen = true
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Text("Pair another phone")
         }
 
@@ -108,39 +122,90 @@ fun ConnectScreen(
             }
 
             SectionHeader("Clipboard")
-            ClipboardCard(lastReceived = state.lastClipboard, lastSent = state.lastClipboard)
+            ClipboardCard(
+                received = state.lastClipboard,
+                receivedAt = state.lastClipboardAt,
+                sent = state.lastSentClipboard,
+            )
         }
 
         if (pairingOpen) {
-            PairingDialog(onDismiss = { pairingOpen = false })
+            PairingDialog(
+                onDismiss = {
+                    pairingOpen = false
+                    if (paired) ConnectionService.start(context)
+                }
+            )
         }
     }
 }
 
 @Composable
-private fun ClipboardCard(lastReceived: String?, lastSent: String?) {
+private fun ClipboardCard(received: String?, receivedAt: Long, sent: String?) {
     val context = LocalContext.current
     val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+    val autoCopy = remember { ClipboardAutoCopy() }
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow
+        .collectAsStateWithLifecycle()
+    var copied by remember { mutableStateOf(false) }
+
+    // Writing to the clipboard is only allowed while this app is focused, and only makes sense
+    // right after the text arrives.
+    LaunchedEffect(received, receivedAt, lifecycleState) {
+        val text = received ?: return@LaunchedEffect
+        val shouldCopy = autoCopy.shouldCopy(
+            text = text,
+            arrivedAtMillis = receivedAt,
+            hasFocus = lifecycleState.isAtLeast(Lifecycle.State.RESUMED),
+            nowMillis = System.currentTimeMillis(),
+        )
+        if (shouldCopy) {
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Graft", text))
+            copied = true
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(GraftSpacing.xs)) {
         Text(
-            lastReceived?.take(160) ?: "Nothing received yet.",
-            style = MaterialTheme.typography.bodySmall,
+            received?.take(200) ?: "Nothing received yet.",
+            style = MaterialTheme.typography.bodyMedium,
             color = GraftPalette.onSurfaceVariant,
+            maxLines = 2,
         )
-        Button(
-            onClick = {
-                val text = clipboard.primaryClip
-                    ?.takeIf { it.itemCount > 0 }
-                    ?.getItemAt(0)
-                    ?.coerceToText(context)
-                    ?.toString()
-                if (!text.isNullOrEmpty()) ConnectionService.sendClipboard(text)
-            }
-        ) {
-            Text("Send clipboard")
+        if (copied) {
+            Text(
+                "Copied to clipboard",
+                style = MaterialTheme.typography.bodySmall,
+                color = GraftPalette.onSurfaceVariant,
+            )
         }
-        lastSent?.let {
+        Row(horizontalArrangement = Arrangement.spacedBy(GraftSpacing.s)) {
+            if (received != null) {
+                OutlinedButton(
+                    onClick = {
+                        clipboard.setPrimaryClip(
+                            android.content.ClipData.newPlainText("Graft", received)
+                        )
+                        copied = true
+                    }
+                ) {
+                    Text("Copy")
+                }
+            }
+            Button(
+                onClick = {
+                    val text = clipboard.primaryClip
+                        ?.takeIf { it.itemCount > 0 }
+                        ?.getItemAt(0)
+                        ?.coerceToText(context)
+                        ?.toString()
+                    if (!text.isNullOrEmpty()) ConnectionService.sendClipboard(text)
+                }
+            ) {
+                Text("Send clipboard")
+            }
+        }
+        sent?.let {
             Text(
                 "Last shared: ${it.take(80)}",
                 style = MaterialTheme.typography.bodySmall,

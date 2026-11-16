@@ -38,6 +38,7 @@ import kr.jjw.graft.files.TransferCoordinator
 import kr.jjw.graft.files.FallbackFileReceivingFactory
 import kr.jjw.graft.files.MediaStoreFileReceivingFactory
 import kr.jjw.graft.files.SafeFilename
+import kr.jjw.graft.files.TransferFailureKind
 import kr.jjw.graft.files.TransferIds
 import kr.jjw.graft.ui.GraftActivity
 
@@ -218,19 +219,22 @@ class ConnectionService : Service() {
         )
         coordinator = sessionCoordinator
 
-        // A transfer is recorded once; the coordinator keeps its outcome in three maps.
-        val recordedTransfers = mutableSetOf<UInt>()
+        // Each transfer is recorded when its outcome changes, so a failed retry that later commits
+        // updates the row instead of leaving it marked as failed.
+        val recordedOutcomes = mutableMapOf<UInt, TransferFailureKind?>()
         fun recordFinishedTransfers() {
             val finished = sessionCoordinator.completed + sessionCoordinator.failures.keys
             for (id in finished) {
-                if (!recordedTransfers.add(id)) continue
+                val error = sessionCoordinator.failures[id]
+                if (recordedOutcomes.containsKey(id) && recordedOutcomes[id] == error) continue
+                recordedOutcomes[id] = error
                 val progress = sessionCoordinator.progress[id]
                 ConnectionRepository.onTransferFinished(
                     id = id,
                     name = progress?.name ?: "file",
                     bytes = progress?.total ?: progress?.confirmed ?: 0,
                     direction = progress?.direction ?: TransferDirection.receive,
-                    error = sessionCoordinator.failures[id],
+                    error = error,
                     destination = sessionCoordinator.locations[id],
                 )
             }
@@ -293,6 +297,7 @@ class ConnectionService : Service() {
             }
         }
 
+        sessionCoordinator.cancelAll()
         sessionClient.close()
         client = null
         coordinator = null

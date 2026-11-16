@@ -37,6 +37,15 @@ object GraftPalette {
     /** Needs attention but still works. */
     val warning = Color(0xFFF0A63C)
 
+    // Material fills roles the palette does not name explicitly; every one of them would otherwise
+    // fall back to the light purple baseline.
+    val onPrimary = Color(0xFF0B1020)
+    val surfaceContainer = Color(0xFF1C232C)
+    val secondaryContainer = Color(0xFF24304A)
+    val onSecondaryContainer = onSurface
+    val inverseSurface = onSurface
+    val inverseOnSurface = background
+
     /** Failed, refused, or refused to re-pair. */
     val error = Color(0xFFF2555A)
 
@@ -69,6 +78,17 @@ fun GraftTheme(content: @Composable () -> Unit) {
             onSurfaceVariant = GraftPalette.onSurfaceVariant,
             outline = GraftPalette.outline,
             error = GraftPalette.error,
+            onPrimary = GraftPalette.onPrimary,
+            surfaceContainer = GraftPalette.surfaceContainer,
+            surfaceContainerHigh = GraftPalette.surfaceContainer,
+            surfaceContainerHighest = GraftPalette.surfaceContainer,
+            surfaceContainerLow = GraftPalette.surface,
+            surfaceContainerLowest = GraftPalette.background,
+            secondaryContainer = GraftPalette.secondaryContainer,
+            onSecondaryContainer = GraftPalette.onSecondaryContainer,
+            inverseSurface = GraftPalette.inverseSurface,
+            inverseOnSurface = GraftPalette.inverseOnSurface,
+            onError = GraftPalette.onPrimary,
         ),
         shapes = Shapes(
             extraSmall = RoundedCornerShape(6.dp),

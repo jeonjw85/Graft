@@ -59,6 +59,16 @@ class TransferCoordinator(
     /** Where each committed receive landed, for the row's Open action. */
     val locations: MutableMap<UInt, String> = mutableMapOf()
 
+    /** Cancels everything in flight; called when a session ends so partial rows do not linger. */
+    @Synchronized
+    fun cancelAll() {
+        receivers.values.forEach { runCatching { it.cancel() } }
+        receivers.clear()
+        senders.keys.forEach { senders.remove(it) }
+        offers.clear()
+        progress.clear()
+    }
+
     @Synchronized
     fun offer(file: File, transferId: UInt): FileOffer {
         require(senders[transferId] == null) { "transfer ${transferId} is already active" }
@@ -113,12 +123,19 @@ class TransferCoordinator(
             )
         } catch (error: FileReceiverException) {
             failures[frame.transferId] = TransferFailureKind.WRONG_OFFSET
+            runCatching { receiver.cancel() }
             receivers.remove(frame.transferId)
             sendControl(errorEnvelope("bad_payload", "chunk at the wrong offset"))
         }
     }
 
     private fun handleOffer(envelope: Envelope) {
+        // A retried transfer id starts clean: an earlier failure must not describe this attempt.
+        tidOf(envelope)?.let { tid ->
+            failures.remove(tid)
+            locations.remove(tid)
+            completed.remove(tid)
+        }
         if (!isPaired()) {
             sendControl(errorEnvelope("unpaired", "pairing required"))
             return
@@ -217,6 +234,7 @@ class TransferCoordinator(
             val ok = receiver.finish(expected)
             if (!ok) throw FileReceiverException(FileReceiverErrorKind.HASH_MISMATCH)
             completed.add(tid)
+            failures.remove(tid)
             receiver.destination?.takeIf { it.isNotBlank() }?.let { locations[tid] = it }
             offers[tid]?.let { records?.remove(it.name, directory.path) }
             progress[tid] = TransferProgress(
@@ -232,6 +250,7 @@ class TransferCoordinator(
             } else {
                 TransferFailureKind.WRONG_OFFSET
             }
+            runCatching { receiver.cancel() }
             receivers.remove(tid)
             // A corrupt partial must not be resumed onto, so the record goes with it.
             offers[tid]?.let { records?.remove(it.name, directory.path) }

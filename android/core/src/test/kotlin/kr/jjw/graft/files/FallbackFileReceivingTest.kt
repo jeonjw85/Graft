@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test
 private class FakeReceiving(
     private val dest: String? = null,
     private val failBegin: Boolean = false,
+    private val beginThrows: Exception? = null,
 ) : FileReceiving {
     var beginCalls = 0
     var writes = 0
@@ -18,6 +19,7 @@ private class FakeReceiving(
 
     override fun begin(offer: FileOffer, resumeOffset: Long): Long {
         beginCalls += 1
+        beginThrows?.let { throw it }
         if (failBegin) throw FileReceiverException(FileReceiverErrorKind.NOT_STARTED, "no")
         return 0
     }
@@ -54,6 +56,18 @@ class FallbackFileReceivingTest {
         assertTrue(receiving.usedFallback)
         assertEquals(1, fallback.beginCalls)
         assertEquals("/cache/received/a.bin", receiving.destination)
+    }
+
+    @Test
+    fun `a platform failure also hands over to the fallback`() {
+        val primary = FakeReceiving(beginThrows = SecurityException("no downloads access"))
+        val fallback = FakeReceiving(dest = "/cache/received/a.bin")
+        val receiving = FallbackFileReceiving(primary, fallback)
+
+        receiving.begin(offer, 0)
+
+        assertTrue(receiving.usedFallback)
+        assertEquals(1, fallback.beginCalls)
     }
 
     @Test

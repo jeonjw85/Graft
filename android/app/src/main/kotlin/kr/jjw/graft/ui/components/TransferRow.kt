@@ -54,7 +54,7 @@ fun TransferRow(
                 detail,
                 style = MaterialTheme.typography.bodySmall,
                 color = GraftPalette.onSurfaceVariant,
-                maxLines = 1,
+                maxLines = 2,
             )
         }
         if (onOpen != null) {

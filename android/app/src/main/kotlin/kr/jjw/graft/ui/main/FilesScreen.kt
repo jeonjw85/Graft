@@ -32,8 +32,11 @@ import kr.jjw.graft.ui.components.SectionHeader
 import kr.jjw.graft.ui.components.TransferRow
 import kr.jjw.graft.ui.theme.GraftSpacing
 
+/** An in-flight transfer together with the id the protocol assigned it. */
+data class ActiveTransfer(val id: UInt, val progress: TransferProgress)
+
 data class FilesScreenState(
-    val active: List<TransferProgress>,
+    val active: List<ActiveTransfer>,
     val recent: List<TransferRecord>,
 )
 
@@ -44,10 +47,24 @@ object FilesScreenRules {
     fun from(
         transfers: Map<UInt, TransferProgress>,
         history: List<TransferRecord>,
-    ): FilesScreenState = FilesScreenState(
-        active = transfers.entries.sortedBy { it.key }.map { it.value },
-        recent = history.take(MAX_RECENT),
-    )
+    ): FilesScreenState {
+        val finished = history.map { it.id }.toSet()
+        return FilesScreenState(
+            // A finished transfer is represented by its history row, not by a stuck progress row.
+            active = transfers
+                .filterKeys { it !in finished }
+                .entries
+                .sortedBy { it.key }
+                .map { ActiveTransfer(it.key, it.value) },
+            recent = history.take(MAX_RECENT),
+        )
+    }
+
+    /** Whole percent, clamped; an empty file that completed reads 100 %. */
+    fun percent(progress: TransferProgress): Int {
+        if (progress.total == 0L) return 100
+        return (progress.fraction.coerceIn(0.0, 1.0) * 100).toInt()
+    }
 
     fun formatSize(bytes: Long): String {
         if (bytes < 1024) return "$bytes B"
@@ -91,7 +108,7 @@ fun FilesScreen(modifier: Modifier = Modifier) {
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { ConnectionService.sendFile(context, it) } }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    androidx.compose.foundation.layout.Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.padding(horizontal = GraftSpacing.l, vertical = GraftSpacing.m),
             verticalArrangement = Arrangement.spacedBy(GraftSpacing.s),
@@ -112,11 +129,11 @@ fun FilesScreen(modifier: Modifier = Modifier) {
         ) {
             if (screen.active.isNotEmpty()) {
                 item { SectionHeader("In progress") }
-                items(screen.active, key = { "active-${it.name}-${it.total}" }) { progress ->
+                items(screen.active, key = { it.id }) { active ->
                     TransferRow(
-                        name = progress.name,
-                        detail = "${(progress.fraction * 100).toInt()}%",
-                        progress = progress.fraction.toFloat(),
+                        name = active.progress.name,
+                        detail = "${FilesScreenRules.percent(active.progress)}%",
+                        progress = active.progress.fraction.toFloat(),
                     )
                 }
             }
@@ -153,6 +170,9 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                 }
             }
         }
-        SnackbarHost(hostState = snackbar)
+        SnackbarHost(
+            hostState = snackbar,
+            modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+        )
     }
 }

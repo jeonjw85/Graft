@@ -42,7 +42,50 @@ class FilesScreenStateTest {
             history = emptyList(),
         )
 
-        assertEquals(listOf("f1", "f3"), state.active.map { it.name })
+        assertEquals(listOf("f1", "f3"), state.active.map { it.progress.name })
+        assertEquals(listOf(1u, 3u), state.active.map { it.id })
+    }
+
+    @Test
+    fun `two transfers of the same name keep distinct identities`() {
+        val state = FilesScreenRules.from(
+            transfers = mapOf(4u to progress(4u, "photo.jpg"), 9u to progress(9u, "photo.jpg")),
+            history = emptyList(),
+        )
+
+        assertEquals(2, state.active.size)
+        assertEquals(2, state.active.map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun `a finished transfer leaves the in progress list`() {
+        val state = FilesScreenRules.from(
+            transfers = mapOf(1u to progress(1u), 2u to progress(2u)),
+            history = listOf(record(1u)),
+        )
+
+        assertEquals(listOf(2u), state.active.map { it.id })
+    }
+
+    @Test
+    fun `percent never exceeds one hundred`() {
+        val over = progress(1u).copy(confirmed = 40, total = 10)
+
+        assertEquals(100, FilesScreenRules.percent(over))
+    }
+
+    @Test
+    fun `an empty file reads one hundred percent when done`() {
+        val empty = progress(1u).copy(confirmed = 0, total = 0)
+
+        assertEquals(100, FilesScreenRules.percent(empty))
+    }
+
+    @Test
+    fun `percent rounds down inside the range`() {
+        val partial = progress(1u).copy(confirmed = 7, total = 10)
+
+        assertEquals(70, FilesScreenRules.percent(partial))
     }
 
     @Test

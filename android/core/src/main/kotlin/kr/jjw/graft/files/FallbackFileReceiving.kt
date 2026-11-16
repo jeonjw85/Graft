@@ -6,9 +6,10 @@ import kr.jjw.graft.core.FileOffer
 /**
  * Tries the primary destination and, when opening it fails, quietly writes to the fallback.
  *
- * Android inserts the MediaStore row inside `begin`, so a denial (no permission, provider down) only
- * shows up there. Falling back keeps the transfer working instead of failing the whole receive, and
- * `usedFallback` lets the UI say where the file actually went.
+ * Android inserts the MediaStore row inside `begin`, so a refusal (no permission, provider down)
+ * only shows up there — as `SecurityException`, `IOException`, or a `FileReceiverException`. Any
+ * failure there falls back, because failing the whole receive is worse than saving the file in app
+ * storage. `usedFallback` lets the UI say where the file actually went.
  */
 class FallbackFileReceiving(
     private val primary: FileReceiving,
@@ -22,7 +23,7 @@ class FallbackFileReceiving(
 
     override fun begin(offer: FileOffer, resumeOffset: Long): Long = try {
         primary.begin(offer, resumeOffset)
-    } catch (error: FileReceiverException) {
+    } catch (error: Exception) {
         usedFallback = true
         active = fallback
         fallback.begin(offer, resumeOffset)

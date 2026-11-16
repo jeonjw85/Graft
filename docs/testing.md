@@ -113,11 +113,15 @@ is a paired peer. Both sides verify SHA-256 before the file is committed.
 - [ ] Sending a file from the phone shows progress and lands in the Mac's downloads folder.
 - [ ] Sending a file while disconnected shows "Connect to your Mac first" instead of failing silently.
 - [ ] A rejected transfer reads `Rejected`, not `Not paired`, in the Files tab.
+- [ ] "Pair another phone" while connected closes the current link, and pairing a phone reconnects to the new one.
+- [ ] A failed transfer that is retried updates its Recent row to Completed.
+- [ ] The app has no white flash at cold start and no light surface on any screen.
 - [ ] No screen shows a light surface, including the manual pairing form and the alerts lists.
-- [ ] A clipboard received while the phone app is open is copied and shows "Copied to clipboard".
+- [ ] A clipboard received while the phone app is open on the Connection tab is copied and shows "Copied to clipboard".
+- [ ] The Copy button copies the last received clipboard again.
 - [ ] A clipboard received while the phone app was closed is not pasted over the user's clipboard later.
 - [ ] On first launch the Mac asks for notification permission once, and a denial does not break pairing or transfers.
-- [ ] The Android app shows the onboarding screen and blocks the Done step until notification access is granted.
+- [ ] The Android app shows the onboarding screen on first launch, and skipping notification access still reaches the scan step.
 - [ ] Denying the camera permission falls back to the six-digit code form.
 - [ ] Sending a 100 MB file completes and the SHA-256 matches on both sides.
 - [ ] Killing the receiver mid-transfer leaves `name.part` and no final file.

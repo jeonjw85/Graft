@@ -87,8 +87,13 @@ class MediaStoreFileReceiver(
             ?: throw FileReceiverException(FileReceiverErrorKind.NOT_STARTED, "MediaStore insert failed")
 
         handle = inserted
-        stream = port.openOutput(inserted)
-            ?: throw FileReceiverException(FileReceiverErrorKind.NOT_STARTED, "openOutputStream failed")
+        val opened = port.openOutput(inserted)
+        if (opened == null) {
+            port.delete(inserted)
+            handle = null
+            throw FileReceiverException(FileReceiverErrorKind.NOT_STARTED, "openOutputStream failed")
+        }
+        stream = opened
         digest = MessageDigest.getInstance("SHA-256")
         written = 0
         return 0

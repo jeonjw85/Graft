@@ -19,8 +19,8 @@ data class TransferRecord(
     val destination: String?,
     val finishedAtMillis: Long,
 ) {
-    /** A receive whose file has a location the system can open. */
-    val canOpen: Boolean get() = destination != null
+    /** A receive whose file another app can open; an app-private path cannot be handed over. */
+    val canOpen: Boolean get() = destination != null && destination.startsWith("content://")
 }
 
 /**

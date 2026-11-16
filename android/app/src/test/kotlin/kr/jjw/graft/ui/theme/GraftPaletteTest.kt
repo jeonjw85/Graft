@@ -20,6 +20,18 @@ class GraftPaletteTest {
     }
 
     @Test
+    fun `the scheme has no light baseline roles left`() {
+        // Material 3 defaults are purple/light; these are the roles a filled button, the navigation
+        // bar, the selected tab pill, and the snackbar use, and each must be part of this palette.
+        assertEquals(Color(0xFF0B1020), GraftPalette.onPrimary)
+        assertEquals(GraftPalette.surfaceVariant, GraftPalette.surfaceContainer)
+        assertEquals(Color(0xFF24304A), GraftPalette.secondaryContainer)
+        assertEquals(GraftPalette.onSurface, GraftPalette.onSecondaryContainer)
+        assertEquals(GraftPalette.onSurface, GraftPalette.inverseSurface)
+        assertEquals(GraftPalette.background, GraftPalette.inverseOnSurface)
+    }
+
+    @Test
     fun `tones map to state colours`() {
         assertEquals(GraftPalette.connected, GraftPalette.colorFor(StatusTone.Positive))
         assertEquals(GraftPalette.onSurfaceVariant, GraftPalette.colorFor(StatusTone.Neutral))

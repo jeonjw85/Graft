@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import kotlinx.coroutines.launch
 import kr.jjw.graft.notifications.NotificationAccess
 import kr.jjw.graft.notifications.NotificationAllowList
@@ -59,7 +60,12 @@ fun AlertsScreen(modifier: Modifier = Modifier) {
         NotificationAllowList.refresh(context)
         allowed = NotificationAllowList.load(context)
         installed = installedApps(context)
+    }
+
+    // Access is granted in a system screen; the composition survives that trip.
+    LifecycleResumeEffect(Unit) {
         accessGranted = NotificationAccess.isGranted(context)
+        onPauseOrDispose { }
     }
 
     val state = AlertsScreenRules.from(accessGranted, connection.recentNotifications)

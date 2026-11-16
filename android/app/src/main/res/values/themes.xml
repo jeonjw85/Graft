@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Graft" parent="android:Theme.Material.Light.NoActionBar" />
+    <!--
+      Dark from the first frame: the system window paints before Compose does, so a light parent
+      theme would flash white on every cold start of a dark-only app.
+    -->
+    <style name="Theme.Graft" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0E1116</item>
+        <item name="android:statusBarColor">#0E1116</item>
+        <item name="android:navigationBarColor">#0E1116</item>
+    </style>
 </resources>

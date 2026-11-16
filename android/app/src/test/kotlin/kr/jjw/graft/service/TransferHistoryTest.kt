@@ -72,6 +72,13 @@ class TransferHistoryTest {
     }
 
     @Test
+    fun `an app storage path is not openable by another app`() {
+        val record = record(destination = "/data/user/0/kr.jjw.graft/files/a.txt")
+
+        assertTrue(!record.canOpen, "only a content URI can be handed to a viewer")
+    }
+
+    @Test
     fun `a sent transfer has nothing to open`() {
         val record = record(direction = TransferDirection.send)
 

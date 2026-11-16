@@ -15,6 +15,8 @@ data class ConnectionUiState(
     val transfers: Map<UInt, TransferProgress> = emptyMap(),
     val lastError: String? = null,
     val lastClipboard: String? = null,
+    /** Text the user asked to send, kept apart from what was received. */
+    val lastSentClipboard: String? = null,
     /** Wall-clock arrival time of [lastClipboard], so the screen can ignore a stale value. */
     val lastClipboardAt: Long = 0L,
     /** Set when the last attempt to send a file failed, so the screen can show why. */
@@ -70,7 +72,9 @@ object ConnectionRepository {
     }
 
     fun onTransferProgress(progress: Map<UInt, TransferProgress>) {
-        _state.update { it.copy(transfers = progress) }
+        // Snapshot: the coordinator mutates its map in place, so holding the reference would make
+        // the new state equal to the old one and swallow every subsequent progress update.
+        _state.update { it.copy(transfers = progress.toMap()) }
     }
 
     /** Records the outcome of sending a file from the phone. */
@@ -106,8 +110,9 @@ object ConnectionRepository {
 
     /** Records text the user asked to send, so the screen can show what was last shared. */
     fun onSubmitClipboard(text: String) {
-        _state.update { it.copy(lastClipboard = text) }
+        _state.update { it.copy(lastSentClipboard = text) }
     }
+
 
     private val pending = java.util.concurrent.ConcurrentLinkedQueue<kr.jjw.graft.notifications.PostedNotification>()
 
