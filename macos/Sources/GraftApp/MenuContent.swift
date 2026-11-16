@@ -24,6 +24,10 @@ struct MenuContent: View {
                 Button("Pair a phone") {
                     service.beginPairing()
                 }
+                Button("Pair without a camera") {
+                    service.beginManualPairing()
+                }
+                .buttonStyle(.link)
             }
 
             peerList

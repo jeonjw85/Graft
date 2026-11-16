@@ -17,6 +17,7 @@ final class GraftService: ObservableObject {
     @Published private(set) var peers: [PairedPeer] = []
     @Published private(set) var pairingURI: String?
     @Published private(set) var qrImage: NSImage?
+    @Published private(set) var manualPairing: PairingService.NumericPairing?
     @Published private(set) var transfers: [UInt32: TransferProgress] = [:]
     @Published private(set) var transferFailure: String?
     @Published private(set) var receiveDirectory: URL = GraftService.defaultReceiveDirectory()
@@ -181,12 +182,29 @@ final class GraftService: ObservableObject {
         menuState = MenuState(status: .pairing, peerName: nil)
     }
 
+    /// Starts a pairing window that does not need a camera and publishes the typed values.
+    func beginManualPairing() {
+        guard let pairingService, let server, let assignedPort = server.port else { return }
+
+        let pairing = pairingService.beginNumericPairing(
+            now: clock(),
+            host: Self.localAddress() ?? "127.0.0.1",
+            port: assignedPort,
+            deviceName: Host.current().localizedName ?? "Graft Mac"
+        )
+        manualPairing = pairing
+        pairingURI = nil
+        qrImage = nil
+        menuState = MenuState(status: .pairing, peerName: nil)
+    }
+
     func refreshPairingState(now: Date) {
         guard case .pairing = menuState.status else { return }
         guard let pairingService, !pairingService.isPairingOpen(now: now) else { return }
 
         pairingURI = nil
         qrImage = nil
+        manualPairing = nil
         menuState = MenuState(status: .idle, peerName: nil)
     }
 

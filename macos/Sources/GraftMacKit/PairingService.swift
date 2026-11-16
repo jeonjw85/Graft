@@ -38,6 +38,35 @@ public final class PairingService: @unchecked Sendable {
         return tokens.isActive(now: now)
     }
 
+    /// The values a user types in when they cannot scan a QR code.
+    public struct NumericPairing: Equatable, Sendable {
+        public let code: String
+        public let fingerprintPrefix: String
+        public let fullFingerprint: String
+        public let host: String
+        public let port: UInt16
+    }
+
+    /// Issues a six-digit code for manual entry and reports the fingerprint prefix to compare.
+    public func beginNumericPairing(
+        now: Date,
+        host: String,
+        port: UInt16,
+        deviceName: String
+    ) -> NumericPairing {
+        lock.lock()
+        let token = tokens.issueNumericCode(now: now)
+        lock.unlock()
+
+        return NumericPairing(
+            code: token.value,
+            fingerprintPrefix: String(local.fingerprint.prefix(8)),
+            fullFingerprint: local.fingerprint,
+            host: host,
+            port: port
+        )
+    }
+
     /// Issues a pairing token and returns the URI to display as a QR code.
     public func beginPairing(
         now: Date,
