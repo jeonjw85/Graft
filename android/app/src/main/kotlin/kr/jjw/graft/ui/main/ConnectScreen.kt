@@ -149,10 +149,3 @@ private fun ClipboardCard(lastReceived: String?, lastSent: String?) {
         }
     }
 }
-
-@Composable
-internal fun AlertsPlaceholder(modifier: Modifier = Modifier) {
-    Column(modifier = modifier.padding(GraftSpacing.l)) {
-        Text("Alerts", style = MaterialTheme.typography.titleMedium)
-    }
-}

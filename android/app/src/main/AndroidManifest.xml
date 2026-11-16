@@ -6,6 +6,17 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!--
+      Android 11+ only lists apps the manifest asks about. Without this, the notification
+      allow list would show nothing but Graft itself.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <!-- Pairing works without a camera (code + fingerprint), so the lens is optional. -->
     <uses-feature
         android:name="android.hardware.camera"
