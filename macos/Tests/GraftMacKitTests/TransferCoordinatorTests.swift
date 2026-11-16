@@ -26,14 +26,23 @@ final class TransferCoordinatorTests: XCTestCase {
         try? FileManager.default.removeItem(at: sourceDirectory)
     }
 
-    private func coordinator(paired: Bool = true, mode: TransferCoordinator.Mode = .both) -> TransferCoordinator {
+    private func coordinator(
+        paired: Bool = true,
+        mode: TransferCoordinator.Mode = .both,
+        records: TransferRecordStore? = nil
+    ) -> TransferCoordinator {
         TransferCoordinator(
             directory: directory,
             mode: mode,
             isPaired: { paired },
             sendControl: { [weak self] envelope in self?.sentControl.append(envelope) },
-            sendBinary: { [weak self] data in self?.sentBinary.append(data) }
+            sendBinary: { [weak self] data in self?.sentBinary.append(data) },
+            records: records
         )
+    }
+
+    private func recordStore() -> TransferRecordStore {
+        TransferRecordStore(file: directory.appendingPathComponent("transfers.json"))
     }
 
     private func payload(_ count: Int) -> Data {
@@ -149,14 +158,15 @@ final class TransferCoordinatorTests: XCTestCase {
         let half = 64 * 1024
 
         // First attempt: half the file arrives, then the connection drops.
-        let first = coordinator()
+        let store = recordStore()
+        let first = coordinator(records: store)
         first.onControl(offerEnvelope(tid: 1, name: "resume-me.bin", size: data.count))
         first.onBinary(try BinaryFrame(transferId: 1, offset: 0, data: data.subdata(in: 0..<half)).encoded())
 
         // Second attempt on a fresh connection must continue, not re-send from zero and not
         // create "resume-me (2).bin".
         sentControl = []
-        let second = coordinator()
+        let second = coordinator(records: store)
         second.onControl(offerEnvelope(tid: 2, name: "resume-me.bin", size: data.count))
 
         let accept = try XCTUnwrap(sentControl.last)
@@ -196,6 +206,59 @@ final class TransferCoordinatorTests: XCTestCase {
 
         let names = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
         XCTAssertEqual(names, ["twice (2).bin", "twice.bin"])
+    }
+
+    func testPartialFileWithoutARecordIsNotResumed() throws {
+        let data = payload(120 * 1024)
+        let half = 64 * 1024
+
+        let first = coordinator()
+        first.onControl(offerEnvelope(tid: 1, name: "orphan.bin", size: data.count))
+        first.onBinary(try BinaryFrame(transferId: 1, offset: 0, data: data.subdata(in: 0..<half)).encoded())
+
+        sentControl = []
+        let second = coordinator()
+        second.onControl(offerEnvelope(tid: 2, name: "orphan.bin", size: data.count))
+
+        let offset = try XCTUnwrap(sentControl.last?.payload.objectValue?["offset"]?.numberValue)
+        XCTAssertEqual(UInt64(offset), 0, "a leftover file with no record must not be resumed")
+    }
+
+    func testHashMismatchClearsTheRecord() throws {
+        let store = recordStore()
+        let data = payload(1024)
+        let coordinator = coordinator(records: store)
+
+        coordinator.onControl(offerEnvelope(tid: 1, name: "bad.bin", size: data.count))
+        coordinator.onBinary(try BinaryFrame(transferId: 1, offset: 0, data: data).encoded())
+        XCTAssertEqual(store.count(), 1)
+
+        coordinator.onControl(
+            Envelope(type: "file.complete", payload: .object([
+                "tid": .number(1),
+                "sha256": .string(String(repeating: "0", count: 64))
+            ]))
+        )
+
+        XCTAssertEqual(store.count(), 0, "a corrupt partial must not stay resumable")
+    }
+
+    func testCompletedTransferClearsTheRecord() throws {
+        let store = recordStore()
+        let data = payload(1024)
+        let coordinator = coordinator(records: store)
+
+        coordinator.onControl(offerEnvelope(tid: 1, name: "done.bin", size: data.count))
+        coordinator.onBinary(try BinaryFrame(transferId: 1, offset: 0, data: data).encoded())
+        let hash = Data(SHA256.hash(data: data)).map { String(format: "%02x", $0) }.joined()
+        coordinator.onControl(
+            Envelope(type: "file.complete", payload: .object([
+                "tid": .number(1),
+                "sha256": .string(hash)
+            ]))
+        )
+
+        XCTAssertEqual(store.count(), 0)
     }
 
     // MARK: - Sending

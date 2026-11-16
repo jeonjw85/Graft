@@ -22,12 +22,19 @@ class TransferCoordinatorTest {
     private val sentControl = mutableListOf<Envelope>()
     private val sentBinary = mutableListOf<ByteArray>()
 
-    private fun coordinator(paired: Boolean = true) = TransferCoordinator(
+    private fun coordinator(
+        paired: Boolean = true,
+        records: TransferRecordStore? = null,
+    ) = TransferCoordinator(
         directory = directory.toFile(),
         isPaired = { paired },
         sendControl = { sentControl.add(it) },
         sendBinary = { sentBinary.add(it) },
+        records = records,
     )
+
+    private fun records(): TransferRecordStore =
+        TransferRecordStore(File(directory.toFile(), "transfers.json"))
 
     private fun payload(count: Int) = ByteArray(count) { index -> (index % 251).toByte() }
 
@@ -142,7 +149,8 @@ class TransferCoordinatorTest {
         val data = payload(120 * 1024)
         val half = 64 * 1024
 
-        val first = coordinator()
+        val store = records()
+        val first = coordinator(records = store)
         first.onControl(offerEnvelope(1u, "resume-me.bin", data.size))
         first.onBinary(BinaryFrame(1u, 0uL, data.copyOfRange(0, half)).encoded())
         first.onControl(
@@ -153,7 +161,7 @@ class TransferCoordinatorTest {
         )
 
         sentControl.clear()
-        val second = coordinator()
+        val second = coordinator(records = store)
         second.onControl(offerEnvelope(2u, "resume-me.bin", data.size))
 
         val accept = sentControl.last()
@@ -176,6 +184,72 @@ class TransferCoordinatorTest {
         )
 
         assertTrue(File(directory.toFile(), "resume-me.bin").readBytes().contentEquals(data))
+    }
+
+    @Test
+    fun `a partial file without a record is not resumed`() {
+        val data = payload(120 * 1024)
+        val half = 64 * 1024
+
+        // No record was written, so even though bytes exist on disk the receiver must start at 0;
+        // otherwise an unrelated leftover file could be appended to.
+        val first = coordinator()
+        first.onControl(offerEnvelope(1u, "orphan.bin", data.size))
+        first.onBinary(BinaryFrame(1u, 0uL, data.copyOfRange(0, half)).encoded())
+        first.onControl(
+            Envelope.create("file.cancel", buildJsonObject { put("tid", JsonPrimitive(1L)) })
+        )
+
+        sentControl.clear()
+        val second = coordinator()
+        second.onControl(offerEnvelope(2u, "orphan.bin", data.size))
+
+        val offset = sentControl.last().payload.jsonObject["offset"]?.jsonPrimitive?.content
+        assertEquals("0", offset)
+    }
+
+    @Test
+    fun `hash mismatch clears the record`() {
+        val store = records()
+        val data = payload(1024)
+        val coordinator = coordinator(records = store)
+
+        coordinator.onControl(offerEnvelope(1u, "bad.bin", data.size))
+        coordinator.onBinary(BinaryFrame(1u, 0uL, data).encoded())
+        assertEquals(1, store.count())
+
+        coordinator.onControl(
+            Envelope.create(
+                "file.complete",
+                buildJsonObject {
+                    put("tid", JsonPrimitive(1L))
+                    put("sha256", JsonPrimitive("0".repeat(64)))
+                }
+            )
+        )
+
+        assertEquals(0, store.count(), "a corrupt partial must not stay resumable")
+    }
+
+    @Test
+    fun `completed transfer clears the record`() {
+        val store = records()
+        val data = payload(1024)
+        val coordinator = coordinator(records = store)
+
+        coordinator.onControl(offerEnvelope(1u, "done.bin", data.size))
+        coordinator.onBinary(BinaryFrame(1u, 0uL, data).encoded())
+        coordinator.onControl(
+            Envelope.create(
+                "file.complete",
+                buildJsonObject {
+                    put("tid", JsonPrimitive(1L))
+                    put("sha256", JsonPrimitive(sha256(data)))
+                }
+            )
+        )
+
+        assertEquals(0, store.count())
     }
 
     @Test

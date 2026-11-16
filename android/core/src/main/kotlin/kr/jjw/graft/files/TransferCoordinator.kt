@@ -38,10 +38,15 @@ class TransferCoordinator(
     private val isPaired: () -> Boolean,
     private val sendControl: (Envelope) -> Unit,
     private val sendBinary: (ByteArray) -> Unit,
+    private val records: TransferRecordStore? = null,
 ) {
     private val receivers = mutableMapOf<UInt, FileReceiver>()
     private val senders = mutableMapOf<UInt, FileSender>()
     private val offers = mutableMapOf<UInt, FileOffer>()
+
+    init {
+        records?.purgeExpired()
+    }
 
     val progress: MutableMap<UInt, TransferProgress> = mutableMapOf()
     val failures: MutableMap<UInt, TransferFailureKind> = mutableMapOf()
@@ -92,6 +97,7 @@ class TransferCoordinator(
 
         try {
             receiver.write(frame)
+            recordProgress(frame.transferId, receiver)
             progress[frame.transferId] = TransferProgress(
                 name = progress[frame.transferId]?.name ?: "file",
                 confirmed = receiver.confirmedBytes,
@@ -135,8 +141,12 @@ class TransferCoordinator(
 
         try {
             val receiver = FileReceiver(directory)
-            // Resume from whatever a previous attempt left on disk.
-            val offset = receiver.begin(offer, ResumeLookup.offset(directory, name, size))
+            // Resume from whatever a previous attempt left on disk, but only when a stored record
+            // agrees; otherwise a leftover file from an unrelated transfer could be appended to.
+            val onDisk = ResumeLookup.offset(directory, name, size)
+            val stored = records?.find(name, directory.path, size, onDisk)
+            val resumeFrom = stored?.bytesConfirmed ?: 0
+            val offset = receiver.begin(offer, resumeFrom)
             receivers[tid] = receiver
             progress[tid] = TransferProgress(
                 name = name,
@@ -199,6 +209,7 @@ class TransferCoordinator(
         try {
             val file = receiver.finish(expected)
             completed.add(tid)
+            offers[tid]?.let { records?.remove(it.name, directory.path) }
             progress[tid] = TransferProgress(
                 name = file.name,
                 confirmed = offers[tid]?.size?.toLong() ?: 0,
@@ -213,6 +224,8 @@ class TransferCoordinator(
                 TransferFailureKind.WRONG_OFFSET
             }
             receivers.remove(tid)
+            // A corrupt partial must not be resumed onto, so the record goes with it.
+            offers[tid]?.let { records?.remove(it.name, directory.path) }
             sendControl(errorEnvelope("hash_mismatch", "hash mismatch"))
         }
     }
@@ -222,6 +235,20 @@ class TransferCoordinator(
         receivers[tid]?.cancel()
         receivers.remove(tid)
         senders.remove(tid)
+    }
+
+    private fun recordProgress(tid: UInt, receiver: FileReceiver) {
+        val store = records ?: return
+        val offer = offers[tid] ?: return
+        store.upsert(
+            ResumeRecord(
+                name = offer.name,
+                directory = directory.path,
+                size = offer.size.toLong(),
+                bytesConfirmed = receiver.confirmedBytes,
+                updatedAtMillis = System.currentTimeMillis(),
+            )
+        )
     }
 
     private fun tidOf(envelope: Envelope): UInt? = runCatching {

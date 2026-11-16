@@ -214,7 +214,8 @@ final class GraftService: ObservableObject {
                 return self.peers.contains { $0.fingerprint == fingerprint }
             },
             sendControl: { [weak connection] envelope in try? connection?.send(envelope) },
-            sendBinary: { [weak connection] data in try? connection?.sendBinary(data) }
+            sendBinary: { [weak connection] data in try? connection?.sendBinary(data) },
+            records: TransferRecordStore(file: Self.defaultRecordStoreURL())
         )
         coordinators[key] = coordinator
 
@@ -331,6 +332,14 @@ final class GraftService: ObservableObject {
         case .wrongOffset: return "The transfer got out of sync"
         case .hashMismatch: return "The file did not arrive intact"
         }
+    }
+
+    static func defaultRecordStoreURL() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
+        return base
+            .appendingPathComponent("Graft", isDirectory: true)
+            .appendingPathComponent("transfers.json")
     }
 
     static func defaultReceiveDirectory() -> URL {

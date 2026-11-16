@@ -36,6 +36,7 @@ public final class TransferCoordinator {
     private let mode: Mode
     private let sendControl: (Envelope) -> Void
     private let sendBinary: (Data) -> Void
+    private let records: TransferRecordStore?
 
     private var receivers: [UInt32: FileReceiver] = [:]
     private var senders: [UInt32: FileSender] = [:]
@@ -51,13 +52,16 @@ public final class TransferCoordinator {
         mode: Mode = .both,
         isPaired: @escaping () -> Bool,
         sendControl: @escaping (Envelope) -> Void,
-        sendBinary: @escaping (Data) -> Void
+        sendBinary: @escaping (Data) -> Void,
+        records: TransferRecordStore? = nil
     ) {
         self.directory = directory
         self.mode = mode
         self.isPaired = isPaired
         self.sendControl = sendControl
         self.sendBinary = sendBinary
+        self.records = records
+        records?.purgeExpired()
     }
 
     /// Registers a local file to send. Returns the transfer id used.
@@ -105,6 +109,7 @@ public final class TransferCoordinator {
 
         do {
             try receiver.write(frame)
+            recordProgress(frame.transferId, receiver)
             progress[frame.transferId] = TransferProgress(
                 name: progress[frame.transferId]?.name ?? "file",
                 confirmed: receiver.confirmedBytes,
@@ -145,7 +150,16 @@ public final class TransferCoordinator {
 
         do {
             let receiver = FileReceiver(directory: directory)
-            let offset = try receiver.begin(offer, resumeOffset: resumeOffset(for: offer))
+            // Resume only when a stored record agrees with what is on disk; a leftover file from an
+            // unrelated transfer must not be appended to.
+            let onDisk = ResumeLookup.offset(in: directory, name: offer.name, size: offer.size)
+            let stored = records?.find(
+                name: offer.name,
+                directory: directory.path,
+                size: offer.size,
+                partialBytesOnDisk: onDisk
+            )
+            let offset = try receiver.begin(offer, resumeOffset: stored?.bytesConfirmed ?? 0)
             receivers[tid] = receiver
             progress[tid] = TransferProgress(
                 name: name,
@@ -211,6 +225,7 @@ public final class TransferCoordinator {
         do {
             let url = try receiver.finish(expectedSha256: expected)
             completed.insert(tid)
+            offers[tid].map { records?.remove(name: $0.name, directory: directory.path) }
             progress[tid] = TransferProgress(
                 name: url.lastPathComponent,
                 confirmed: offers[tid]?.size ?? 0,
@@ -220,6 +235,8 @@ public final class TransferCoordinator {
             receivers.removeValue(forKey: tid)
         } catch FileReceiverError.hashMismatch {
             failures[tid] = .hashMismatch
+            // A corrupt partial must not be resumed onto.
+            offers[tid].map { records?.remove(name: $0.name, directory: directory.path) }
             receivers.removeValue(forKey: tid)
             sendControl(errorEnvelope(code: "hash_mismatch", message: "hash mismatch"))
         } catch {
@@ -241,9 +258,17 @@ public final class TransferCoordinator {
         envelope.payload.objectValue?["tid"]?.numberValue.map(UInt32.init)
     }
 
-    /// Bytes already on disk for this name, so a reconnect continues instead of starting over.
-    private func resumeOffset(for offer: FileOffer) -> UInt64 {
-        ResumeLookup.offset(in: directory, name: offer.name, size: offer.size)
+    private func recordProgress(_ transferId: UInt32, _ receiver: FileReceiver) {
+        guard let records, let offer = offers[transferId] else { return }
+        records.upsert(
+            ResumeRecord(
+                name: offer.name,
+                directory: directory.path,
+                size: offer.size,
+                bytesConfirmed: receiver.confirmedBytes,
+                updatedAtMillis: Int64(Date().timeIntervalSince1970 * 1000)
+            )
+        )
     }
 
     private func envelope(for offer: FileOffer) -> Envelope {
