@@ -23,6 +23,7 @@ final class GraftService: ObservableObject {
     @Published private(set) var receiveDirectory: URL = GraftService.defaultReceiveDirectory()
     @Published var autoCopyClipboard = true
     @Published private(set) var notificationPreviews = true
+    @Published private(set) var notificationsAllowed: Bool?
     @Published private(set) var lastSharedClipboard: String?
     @Published private(set) var recentNotifications: [NotificationPresenter.Recent] = []
 
@@ -37,7 +38,26 @@ final class GraftService: ObservableObject {
     private var coordinators: [ObjectIdentifier: TransferCoordinator] = [:]
     private var nextTransferId: UInt32 = 1
     private let clipboard = ClipboardBridge(writer: PasteboardWriter(), reader: PasteboardReader())
-    private let notifications = NotificationPresenter(port: SystemNotificationCenter())
+    private let notifications = NotificationPresenter(
+        port: SystemNotificationCenter(),
+        authorization: SystemNotificationAuthorization()
+    )
+
+    /// Asks for notification permission once, so banners can appear the first time a phone alerts.
+    func requestNotificationAuthorization() {
+        notifications.onAuthorizationChange = { [weak self] granted in
+            DispatchQueue.main.async { self?.notificationsAllowed = granted }
+        }
+        notifications.requestAuthorizationIfNeeded()
+    }
+
+    /// Opens the system pane where a denied notification permission can be re-enabled.
+    func openNotificationSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
 
     /// The most recent live connection, used for menu actions such as "Send clipboard".
     private var connection: TransportConnection?

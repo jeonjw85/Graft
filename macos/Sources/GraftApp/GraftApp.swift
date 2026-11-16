@@ -39,5 +39,6 @@ final class GraftLauncher {
         guard !service.hasStarted else { return }
         try? service.start()
         service.markStarted()
+        service.requestNotificationAuthorization()
     }
 }

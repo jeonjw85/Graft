@@ -7,6 +7,11 @@ public protocol NotificationCenterPort {
     func add(title: String, body: String)
 }
 
+/// The slice of `UNUserNotificationCenter` that asks for permission, kept separate for tests.
+public protocol NotificationAuthorizationPort {
+    func request(completion: @escaping (Bool) -> Void)
+}
+
 /// Posts Android notifications as local macOS notifications and keeps a recent list in memory.
 public final class NotificationPresenter {
     public struct Recent: Equatable, Sendable {
@@ -20,13 +25,37 @@ public final class NotificationPresenter {
     public static let maxRecent = 50
 
     private let port: NotificationCenterPort
+    private let authorization: NotificationAuthorizationPort?
+    private var askedForAuthorization = false
+
     public private(set) var recent: [Recent] = []
+
+    /// The user's answer to the system prompt, or nil while it is still open or never asked.
+    public private(set) var notificationsAllowed: Bool?
+
+    /// Called with the answer so the UI can show that banners are off.
+    public var onAuthorizationChange: ((Bool) -> Void)?
 
     /// When false, the banner says only which app alerted, never the text.
     public var showPreviews = true
 
-    public init(port: NotificationCenterPort) {
+    public init(
+        port: NotificationCenterPort,
+        authorization: NotificationAuthorizationPort? = nil
+    ) {
         self.port = port
+        self.authorization = authorization
+    }
+
+    /// Asks the system once per launch. A denial is recorded and nothing else changes: pairing,
+    /// transfers, and the recent list keep working, only the banners stay silent.
+    public func requestAuthorizationIfNeeded() {
+        guard let authorization, !askedForAuthorization else { return }
+        askedForAuthorization = true
+        authorization.request { [weak self] granted in
+            self?.notificationsAllowed = granted
+            self?.onAuthorizationChange?(granted)
+        }
     }
 
     /// Returns whether the frame was presented.
@@ -63,6 +92,17 @@ public final class NotificationPresenter {
             used += size
         }
         return result
+    }
+}
+
+/// Adapter that asks `UNUserNotificationCenter` for permission.
+public struct SystemNotificationAuthorization: NotificationAuthorizationPort {
+    public init() {}
+
+    public func request(completion: @escaping (Bool) -> Void) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            completion(granted)
+        }
     }
 }
 

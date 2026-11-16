@@ -19,6 +19,18 @@ struct NotificationSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if service.notificationsAllowed == false {
+                Text("Notifications are turned off for Graft in System Settings, so phone alerts cannot appear.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button("Open Notification Settings") {
+                    service.openNotificationSettings()
+                }
+                .buttonStyle(.link)
+            }
         }
     }
 }
