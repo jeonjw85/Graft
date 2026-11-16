@@ -149,6 +149,7 @@ If the magic, version, or reserved byte does not match, the frame is dropped and
 - The receiver writes to `name.part` and renames it only after the SHA-256 of the bytes on disk matches `file.complete.sha256`.
 - `file.accept.offset` requests a resume point. The receiver may answer with a lower offset if its partial file is missing or the wrong size, and the sender restarts from there.
 - A transfer with no chunk for 30 seconds fails and the partial file is removed.
+- Resume state is remembered for 24 hours. A receiver resumes only when its stored record agrees on name, directory, size, and bytes on disk; otherwise it answers `file.accept` with offset 0.
 
 ### 3.2 Where files land
 

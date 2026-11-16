@@ -54,7 +54,15 @@ control messages `file.offer`, `file.accept`, `file.reject`, `file.complete`, `f
 
 - A resumed transfer re-reads the partial file once to rebuild the digest. For a 1 GB file that is
   about a second of I/O, which is acceptable for the safety it buys.
-- The resume record is currently per session: closing the app starts a new transfer from zero. A
-  persistent record (24 hours, per the design) belongs in the app layer and is not implemented yet.
-- Automated end-to-end transfer is not in CI yet because the coordinator lives in the Android app
-  module. The scripted path is a manual headless run; unit tests cover the behaviour on both sides.
+- Resume records persist for 24 hours in `transfers.json` (application support on macOS, app files
+  on Android). A record matches only when the name, directory, total size, and the bytes actually
+  on disk all agree; anything else starts from zero. Expired records are deleted on load and on
+  purge.
+- The transfer code now lives in the shared core module, so the same coordinator that the apps use
+  is what the end-to-end test drives. `protocol/tools/e2e-transfer.sh` sends a 5 MiB file and
+  compares hashes on both sides.
+- Android writes through `MediaStore` with `IS_PENDING` set, so a half-written file never appears in
+  the Downloads list. Because MediaStore cannot append to a pending row from a previous process,
+  the Android receiver always restarts at offset 0; the 24-hour record still helps macOS.
+- Not yet verified on a physical Android device: the app does not construct a coordinator on device
+  until the connection service is wired.
