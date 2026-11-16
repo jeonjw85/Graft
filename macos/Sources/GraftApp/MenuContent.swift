@@ -30,6 +30,8 @@ struct MenuContent: View {
 
             if service.menuState.isConnected {
                 Divider()
+                clipboardSection
+                Divider()
                 TransferProgressView(service: service)
             }
 
@@ -51,6 +53,23 @@ struct MenuContent: View {
             Text(service.menuState.statusLabel)
                 .font(.headline)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var clipboardSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Button("Send clipboard") { service.sendClipboard() }
+                Spacer()
+                Toggle("Copy received", isOn: $service.autoCopyClipboard)
+                    .toggleStyle(.checkbox)
+            }
+            if let last = service.lastSharedClipboard {
+                Text("Last sent: \(last)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
         }
     }
 

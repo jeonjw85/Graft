@@ -294,7 +294,7 @@ public final class TransferCoordinator {
 
 extension JSONValue {
     /// Numeric payload fields arrive as JSON numbers; ranges are validated by the caller.
-    var numberValue: Double? {
+    public var numberValue: Double? {
         if case .number(let value) = self { return value }
         return nil
     }

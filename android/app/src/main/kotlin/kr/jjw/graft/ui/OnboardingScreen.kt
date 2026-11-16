@@ -158,6 +158,34 @@ fun OnboardingScreen(viewModel: OnboardingViewModel) {
                 Button(onClick = { ConnectionService.stop(context) }) {
                     Text("Disconnect")
                 }
+
+                val derived = ConnectedScreenState.from(connection)
+                if (derived.canSendClipboard) {
+                    Spacer(Modifier.height(16.dp))
+                    val clipboardManager = androidx.compose.ui.platform.LocalContext.current
+                        .getSystemService(android.content.ClipboardManager::class.java)
+                    Button(
+                        onClick = {
+                            val text = clipboardManager.primaryClip
+                                ?.takeIf { it.itemCount > 0 }
+                                ?.getItemAt(0)
+                                ?.coerceToText(context)
+                                ?.toString()
+                            if (!text.isNullOrEmpty()) {
+                                ConnectionService.sendClipboard(text)
+                            }
+                        }
+                    ) {
+                        Text("Send clipboard to Mac")
+                    }
+                    derived.clipboardNote?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
+                    ConnectionRepository.state.value.lastClipboard?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Last shared: $it", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
         }
 

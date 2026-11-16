@@ -66,6 +66,11 @@ object ConnectionRepository {
         _state.update { it.copy(lastClipboard = text) }
     }
 
+    /** Records text the user asked to send, so the screen can show what was last shared. */
+    fun onSubmitClipboard(text: String) {
+        _state.update { it.copy(lastClipboard = text) }
+    }
+
     fun onStopped() {
         pairedName = null
         _state.value = ConnectionUiState()

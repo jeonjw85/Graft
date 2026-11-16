@@ -20,6 +20,8 @@ final class GraftService: ObservableObject {
     @Published private(set) var transfers: [UInt32: TransferProgress] = [:]
     @Published private(set) var transferFailure: String?
     @Published private(set) var receiveDirectory: URL = GraftService.defaultReceiveDirectory()
+    @Published var autoCopyClipboard = true
+    @Published private(set) var lastSharedClipboard: String?
 
     private let port: UInt16
     private let store: PeerStore
@@ -31,6 +33,10 @@ final class GraftService: ObservableObject {
     private var sessions: [ObjectIdentifier: ConnectionSession] = [:]
     private var coordinators: [ObjectIdentifier: TransferCoordinator] = [:]
     private var nextTransferId: UInt32 = 1
+    private let clipboard = ClipboardBridge(writer: PasteboardWriter(), reader: PasteboardReader())
+
+    /// The most recent live connection, used for menu actions such as "Send clipboard".
+    private var connection: TransportConnection?
     private var heartbeatTimer: DispatchSourceTimer?
     private(set) var lastError: Error?
     private(set) var hasStarted = false
@@ -206,6 +212,7 @@ final class GraftService: ObservableObject {
 
         let key = ObjectIdentifier(connection)
         sessions[key] = session
+        self.connection = connection
 
         let coordinator = TransferCoordinator(
             directory: receiveDirectory,
@@ -224,6 +231,7 @@ final class GraftService: ObservableObject {
                 guard let self, let session = self.sessions[key] else { return }
                 session.handle(envelope: envelope, now: self.clock())
                 self.coordinators[key]?.onControl(envelope)
+                self.handleClipboard(envelope)
                 self.syncTransfers()
                 self.publishState(for: session)
                 self.persistPairingIfNeeded()
@@ -291,6 +299,23 @@ final class GraftService: ObservableObject {
         peers = store.load()
         pairingURI = nil
         qrImage = nil
+    }
+
+    // MARK: - Clipboard
+
+    private func handleClipboard(_ envelope: Envelope) {
+        guard autoCopyClipboard else { return }
+        clipboard.received(envelope)
+    }
+
+    /// Sends the current pasteboard text to the connected phone.
+    func sendClipboard() {
+        guard let envelope = clipboard.outgoing() else {
+            transferFailure = "There is no text on the clipboard"
+            return
+        }
+        try? connection?.send(envelope)
+        lastSharedClipboard = envelope.payload.objectValue?["body"]?.stringValue
     }
 
     // MARK: - File transfer

@@ -164,7 +164,7 @@ public final class PairingService: @unchecked Sendable {
 }
 
 extension JSONValue {
-    var objectValue: [String: JSONValue]? {
+    public var objectValue: [String: JSONValue]? {
         if case .object(let value) = self { return value }
         return nil
     }
@@ -174,7 +174,7 @@ extension JSONValue {
         return nil
     }
 
-    var stringValue: String? {
+    public var stringValue: String? {
         if case .string(let value) = self { return value }
         return nil
     }

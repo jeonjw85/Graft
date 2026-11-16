@@ -45,9 +45,11 @@ class ConnectionService : Service() {
     private var client: GraftClient? = null
     private var coordinator: TransferCoordinator? = null
     private var retryAttempt = 0
+    private val clipboard = kr.jjw.graft.clipboard.ClipboardBridge()
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         createChannel()
         startForeground(NOTIFICATION_ID, buildNotification("Starting…"))
     }
@@ -69,6 +71,7 @@ class ConnectionService : Service() {
     override fun onBind(intent: Intent?): android.os.IBinder? = null
 
     override fun onDestroy() {
+        instance = null
         stopConnection()
         scope.cancel()
         super.onDestroy()
@@ -147,6 +150,12 @@ class ConnectionService : Service() {
             when (event) {
                 is ConnectionEvent.Message -> {
                     sessionCoordinator.onControl(event.envelope)
+
+                    if (event.envelope.type == "clipboard.update") {
+                        clipboard.onMessage(event.envelope)?.let { text ->
+                            ConnectionRepository.onClipboardReceived(text)
+                        }
+                    }
                     when (event.envelope.type) {
                         "pair.ok" -> sessionClient.send(
                             Envelope.create(
@@ -259,12 +268,23 @@ class ConnectionService : Service() {
         const val ACTION_DISCONNECT = "kr.jjw.graft.DISCONNECT"
         const val PREFS = "graft-peer"
         private const val CHANNEL_ID = "graft-connection"
-        private const val NOTIFICATION_ID = 1
+        const val NOTIFICATION_ID = 1
+
+        @Volatile
+        private var instance: ConnectionService? = null
 
         fun start(context: Context) {
             context.startForegroundService(
                 Intent(context, ConnectionService::class.java).apply { action = ACTION_CONNECT }
             )
+        }
+
+        /** Sends the given clipboard text; the caller reads the clipboard while it has focus. */
+        fun sendClipboard(text: String) {
+            val client = instance?.client ?: return
+            val envelope = instance?.clipboard?.outgoing(text) ?: return
+            client.send(envelope)
+            ConnectionRepository.onSubmitClipboard(text)
         }
 
         fun stop(context: Context) {
