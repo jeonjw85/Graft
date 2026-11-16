@@ -55,6 +55,21 @@ public enum SafeFilename {
     }
 }
 
+/// Finds bytes already on disk for a name, so a new connection can resume an earlier attempt.
+public enum ResumeLookup {
+    /// Returns the size of `name.part` when it is a plausible prefix of [size], otherwise 0.
+    public static func offset(in directory: URL, name: String, size: UInt64) -> UInt64 {
+        guard let safe = SafeFilename.sanitize(name) else { return 0 }
+        let part = directory.appendingPathComponent(safe + ".part")
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: part.path),
+              let partial = (attributes[.size] as? NSNumber)?.uint64Value,
+              partial > 0, partial <= size else {
+            return 0
+        }
+        return partial
+    }
+}
+
 public enum FileReceiverError: Error, Equatable {
     case unsafeName
     case wrongOffset(expected: UInt64, got: UInt64)

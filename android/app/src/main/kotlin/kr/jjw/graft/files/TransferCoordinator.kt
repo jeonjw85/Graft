@@ -135,7 +135,8 @@ class TransferCoordinator(
 
         try {
             val receiver = FileReceiver(directory)
-            val offset = receiver.begin(offer, 0)
+            // Resume from whatever a previous attempt left on disk.
+            val offset = receiver.begin(offer, ResumeLookup.offset(directory, name, size))
             receivers[tid] = receiver
             progress[tid] = TransferProgress(
                 name = name,

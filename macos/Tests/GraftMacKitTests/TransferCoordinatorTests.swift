@@ -144,6 +144,60 @@ final class TransferCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.failures[1], .wrongOffset)
     }
 
+    func testPartialFileFromAnEarlierAttemptIsResumed() throws {
+        let data = payload(120 * 1024)
+        let half = 64 * 1024
+
+        // First attempt: half the file arrives, then the connection drops.
+        let first = coordinator()
+        first.onControl(offerEnvelope(tid: 1, name: "resume-me.bin", size: data.count))
+        first.onBinary(try BinaryFrame(transferId: 1, offset: 0, data: data.subdata(in: 0..<half)).encoded())
+
+        // Second attempt on a fresh connection must continue, not re-send from zero and not
+        // create "resume-me (2).bin".
+        sentControl = []
+        let second = coordinator()
+        second.onControl(offerEnvelope(tid: 2, name: "resume-me.bin", size: data.count))
+
+        let accept = try XCTUnwrap(sentControl.last)
+        XCTAssertEqual(accept.type, "file.accept")
+        let offset = try XCTUnwrap(accept.payload.objectValue?["offset"]?.numberValue)
+        XCTAssertEqual(UInt64(offset), UInt64(half), "the receiver must report the bytes it already has")
+
+        second.onBinary(
+            try BinaryFrame(transferId: 2, offset: UInt64(half), data: data.subdata(in: half..<data.count)).encoded()
+        )
+        let hash = Data(SHA256.hash(data: data)).map { String(format: "%02x", $0) }.joined()
+        second.onControl(
+            Envelope(type: "file.complete", payload: .object([
+                "tid": .number(2),
+                "sha256": .string(hash)
+            ]))
+        )
+
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("resume-me.bin")), data)
+    }
+
+    func testCompletedFileWithTheSameNameGetsASuffix() throws {
+        let data = payload(1024)
+        let coordinator = coordinator()
+
+        for tid in [UInt32(1), UInt32(2)] {
+            coordinator.onControl(offerEnvelope(tid: tid, name: "twice.bin", size: data.count))
+            coordinator.onBinary(try BinaryFrame(transferId: tid, offset: 0, data: data).encoded())
+            let hash = Data(SHA256.hash(data: data)).map { String(format: "%02x", $0) }.joined()
+            coordinator.onControl(
+                Envelope(type: "file.complete", payload: .object([
+                    "tid": .number(Double(tid)),
+                    "sha256": .string(hash)
+                ]))
+            )
+        }
+
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+        XCTAssertEqual(names, ["twice (2).bin", "twice.bin"])
+    }
+
     // MARK: - Sending
 
     func testOfferSendsControlAndFramesOnAccept() throws {

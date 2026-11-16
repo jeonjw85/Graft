@@ -137,6 +137,72 @@ class TransferCoordinatorTest {
         assertEquals(TransferFailureKind.WRONG_OFFSET, coordinator.failures[1u])
     }
 
+    @Test
+    fun `partial file from an earlier attempt is resumed`() {
+        val data = payload(120 * 1024)
+        val half = 64 * 1024
+
+        val first = coordinator()
+        first.onControl(offerEnvelope(1u, "resume-me.bin", data.size))
+        first.onBinary(BinaryFrame(1u, 0uL, data.copyOfRange(0, half)).encoded())
+        first.onControl(
+            Envelope.create(
+                "file.cancel",
+                buildJsonObject { put("tid", JsonPrimitive(1L)) }
+            )
+        )
+
+        sentControl.clear()
+        val second = coordinator()
+        second.onControl(offerEnvelope(2u, "resume-me.bin", data.size))
+
+        val accept = sentControl.last()
+        assertEquals("file.accept", accept.type)
+        assertEquals(
+            half.toLong(),
+            accept.payload.jsonObject["offset"]?.jsonPrimitive?.content?.toLong(),
+            "the receiver must report the bytes it already has"
+        )
+
+        second.onBinary(BinaryFrame(2u, half.toULong(), data.copyOfRange(half, data.size)).encoded())
+        second.onControl(
+            Envelope.create(
+                "file.complete",
+                buildJsonObject {
+                    put("tid", JsonPrimitive(2L))
+                    put("sha256", JsonPrimitive(sha256(data)))
+                }
+            )
+        )
+
+        assertTrue(File(directory.toFile(), "resume-me.bin").readBytes().contentEquals(data))
+    }
+
+    @Test
+    fun `completed file with the same name gets a suffix`() {
+        val data = payload(1024)
+        val coordinator = coordinator()
+
+        for (tid in listOf(1u, 2u)) {
+            coordinator.onControl(offerEnvelope(tid, "twice.bin", data.size))
+            coordinator.onBinary(BinaryFrame(tid, 0uL, data).encoded())
+            coordinator.onControl(
+                Envelope.create(
+                    "file.complete",
+                    buildJsonObject {
+                        put("tid", JsonPrimitive(tid.toLong()))
+                        put("sha256", JsonPrimitive(sha256(data)))
+                    }
+                )
+            )
+        }
+
+        assertEquals(
+            listOf("twice (2).bin", "twice.bin"),
+            directory.toFile().list()!!.sorted()
+        )
+    }
+
     // MARK: - Sending
 
     @Test

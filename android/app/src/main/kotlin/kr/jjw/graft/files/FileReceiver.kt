@@ -55,6 +55,17 @@ object SafeFilename {
     }
 }
 
+/** Finds bytes already on disk for a name, so a new connection can resume an earlier attempt. */
+object ResumeLookup {
+    fun offset(directory: File, name: String, size: Long): Long {
+        val safe = SafeFilename.sanitize(name) ?: return 0
+        val part = File(directory, "$safe.part")
+        if (!part.exists()) return 0
+        val partial = part.length()
+        return if (partial in 1..size) partial else 0
+    }
+}
+
 enum class FileReceiverErrorKind {
     UNSAFE_NAME,
     WRONG_OFFSET,

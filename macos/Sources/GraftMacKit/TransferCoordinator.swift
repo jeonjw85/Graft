@@ -145,7 +145,7 @@ public final class TransferCoordinator {
 
         do {
             let receiver = FileReceiver(directory: directory)
-            let offset = try receiver.begin(offer, resumeOffset: resumeOffset(for: tid))
+            let offset = try receiver.begin(offer, resumeOffset: resumeOffset(for: offer))
             receivers[tid] = receiver
             progress[tid] = TransferProgress(
                 name: name,
@@ -241,10 +241,9 @@ public final class TransferCoordinator {
         envelope.payload.objectValue?["tid"]?.numberValue.map(UInt32.init)
     }
 
-    private func resumeOffset(for transferId: UInt32) -> UInt64 {
-        // v0.1 resumes only within one session; a restart starts from zero until the record store
-        // lands, which the plan defers to the app layer.
-        0
+    /// Bytes already on disk for this name, so a reconnect continues instead of starting over.
+    private func resumeOffset(for offer: FileOffer) -> UInt64 {
+        ResumeLookup.offset(in: directory, name: offer.name, size: offer.size)
     }
 
     private func envelope(for offer: FileOffer) -> Envelope {
