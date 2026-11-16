@@ -54,7 +54,16 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n kr.jjw.graft/.ui.GraftActivity
 ```
 
-## File transfer
+## End-to-end file transfer
+
+```bash
+./protocol/tools/e2e-transfer.sh
+```
+
+Creates a 5 MiB random file, has the headless Mac offer it, receives it with the Kotlin peer, and
+fails unless both SHA-256 digests agree. Runs in CI after the pairing test.
+
+## Manual file transfer
 
 ```bash
 # headless sender: offers the file once a peer is ready

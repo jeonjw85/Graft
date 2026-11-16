@@ -30,14 +30,24 @@ import kotlinx.serialization.json.jsonPrimitive
 fun main(args: Array<String>) {
     var uri: String? = null
     var expectRefused = false
+    var transferUri: String? = null
+    var receiveDir: String? = null
+    var sendPath: String? = null
     var index = 0
     while (index < args.size) {
         when (args[index]) {
             "--uri" -> uri = args.getOrNull(++index)
             "--expect-refused" -> expectRefused = true
+            "--transfer-uri" -> transferUri = args.getOrNull(++index)
+            "--receive-dir" -> receiveDir = args.getOrNull(++index)
+            "--send" -> sendPath = args.getOrNull(++index)
             else -> Unit
         }
         index++
+    }
+
+    if (transferUri != null) {
+        runTransfer(transferUri, receiveDir ?: error("--receive-dir is required"), sendPath)
     }
 
     if (uri == null) {

@@ -116,9 +116,7 @@ do {
             _ = result
 
             coordinator.onControl(envelope)
-            if envelope.type == "file.offer" || envelope.type == "file.accept" {
-                FileHandle.standardError.write(Data("\(envelope.type)\n".utf8))
-            }
+
 
             // Auto-offer the requested file once the peer is ready, so the e2e test does not need
             // a human to press a button.

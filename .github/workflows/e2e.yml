@@ -38,3 +38,6 @@ jobs:
 
       - name: Run transport and pairing end-to-end test
         run: ./protocol/tools/e2e-pairing.sh
+
+      - name: Run file transfer end-to-end test
+        run: ./protocol/tools/e2e-transfer.sh
