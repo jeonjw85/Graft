@@ -355,6 +355,19 @@ class ConnectionService : Service() {
         @Volatile
         private var instance: ConnectionService? = null
 
+        /** Stores a scanned offer so the service connects with the QR code's pinned fingerprint. */
+        fun savePairingOffer(context: Context, offer: PairingOffer) {
+            context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString("host", offer.host)
+                .putInt("port", offer.port)
+                .putString("fingerprint", offer.fingerprint)
+                .putString("token", offer.token)
+                .putString("name", offer.name)
+                .remove("prefix")
+                .apply()
+        }
+
         fun start(context: Context) {
             context.startForegroundService(
                 Intent(context, ConnectionService::class.java).apply { action = ACTION_CONNECT }

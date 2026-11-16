@@ -183,37 +183,52 @@ fun OnboardingScreen(viewModel: OnboardingViewModel) {
             }
 
             OnboardingStep.Scan -> {
+                val context = LocalContext.current
+                val scan = remember { ScanViewModel() }
+                var scanError by remember { mutableStateOf<String?>(null) }
+
                 Text("Pair with your Mac", style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(12.dp))
                 Text(
                     if (state.useManualCode) {
-                        "Camera unavailable. Enter the six-digit code shown on your Mac."
+                        "Camera unavailable. Enter the values shown on your Mac below."
                     } else {
                         "Point the camera at the QR code in the Graft menu bar."
                     }
                 )
                 Spacer(Modifier.height(16.dp))
-                var code by remember { mutableStateOf("") }
-                OutlinedTextField(
-                    value = code,
-                    onValueChange = { code = it },
-                    label = { Text("Six-digit code") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = { refresh { viewModel.onCodeEntered(code) } }) {
-                    Text("Use this code")
+
+                if (!state.useManualCode) {
+                    QRScanner(
+                        onScanned = { raw ->
+                            scan.onQRScanned(raw)
+                            val offer = scan.state.offer
+                            if (offer == null) {
+                                scanError = scan.state.error
+                            } else {
+                                scanError = null
+                                ConnectionService.savePairingOffer(context, offer)
+                                ConnectionService.start(context)
+                                refresh { viewModel.advance() }
+                            }
+                        },
+                        onPermissionDenied = {
+                            refresh { viewModel.onPermissionResult("camera", false) }
+                        },
+                    )
                 }
-                if (state.cameraGranted) {
+
+                scanError?.let {
                     Spacer(Modifier.height(8.dp))
-                    Button(onClick = { refresh { viewModel.advance() } }) {
-                        Text("Skip for now")
-                    }
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
 
                 Spacer(Modifier.height(24.dp))
-                ManualPairingForm(context = LocalContext.current)
+                ManualPairingForm(context = context)
             }
 
             OnboardingStep.Done -> {
