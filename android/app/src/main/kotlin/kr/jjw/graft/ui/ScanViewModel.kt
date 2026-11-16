@@ -43,11 +43,10 @@ class ScanViewModel(private val defaultHost: String? = null) {
             targetHost.isNullOrBlank() ->
                 ScanState(error = "Enter your Mac's IP address too", useManualCode = true)
 
-            // TLS authenticates the Mac by its SPKI fingerprint. A typed code carries no
-            // fingerprint, so accepting it would either fail at the TLS layer with a confusing
-            // error or invite trust-on-first-use, which this project explicitly avoids.
+            // The code alone is not enough: the manual form also collects the fingerprint prefix
+            // the Mac displays, and ManualPairingRules validates all three values.
             else -> ScanState(
-                error = "The six-digit code needs the camera path for now. Scan the QR code instead.",
+                error = "Enter the fingerprint prefix from your Mac as well",
                 useManualCode = true,
             )
         }

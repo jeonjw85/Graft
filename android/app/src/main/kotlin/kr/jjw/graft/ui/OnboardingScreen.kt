@@ -51,6 +51,84 @@ class GraftActivity : ComponentActivity() {
     }
 }
 
+/** Code + fingerprint prefix + address, for phones with no camera or a blocked camera. */
+@Composable
+fun ManualPairingForm(context: android.content.Context) {
+    var code by remember { mutableStateOf("") }
+    var prefix by remember { mutableStateOf("") }
+    var host by remember { mutableStateOf("") }
+    var port by remember { mutableStateOf("47800") }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text("Pair without a camera", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Enter the three values shown on your Mac's menu bar window.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = code,
+            onValueChange = { code = it },
+            label = { Text("Six-digit code") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(6.dp))
+        OutlinedTextField(
+            value = prefix,
+            onValueChange = { prefix = it },
+            label = { Text("Fingerprint (8 characters)") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(6.dp))
+        OutlinedTextField(
+            value = host,
+            onValueChange = { host = it },
+            label = { Text("Mac IP address") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(6.dp))
+        OutlinedTextField(
+            value = port,
+            onValueChange = { port = it },
+            label = { Text("Port") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = {
+                when (val result = ManualPairingRules.validate(code, prefix, host, port)) {
+                    is ManualPairingRules.Result.Invalid -> message = result.message
+                    is ManualPairingRules.Result.Valid -> {
+                        message = null
+                        val prefs = context.getSharedPreferences(
+                            kr.jjw.graft.service.ConnectionService.PREFS,
+                            android.content.Context.MODE_PRIVATE,
+                        )
+                        prefs.edit()
+                            .putString("host", result.pairing.host)
+                            .putInt("port", result.pairing.port)
+                            .putString("prefix", result.pairing.prefix)
+                            .putString("token", result.pairing.code)
+                            .apply()
+                        kr.jjw.graft.service.ConnectionService.start(context)
+                    }
+                }
+            }
+        ) {
+            Text("Pair")
+        }
+        message?.let {
+            Spacer(Modifier.height(6.dp))
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
 @Composable
 fun OnboardingScreen(viewModel: OnboardingViewModel) {
     var state by remember { mutableStateOf(viewModel.state) }
@@ -133,6 +211,9 @@ fun OnboardingScreen(viewModel: OnboardingViewModel) {
                         Text("Skip for now")
                     }
                 }
+
+                Spacer(Modifier.height(24.dp))
+                ManualPairingForm(context = LocalContext.current)
             }
 
             OnboardingStep.Done -> {

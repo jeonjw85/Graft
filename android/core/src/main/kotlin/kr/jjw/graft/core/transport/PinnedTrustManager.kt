@@ -15,10 +15,10 @@ import kr.jjw.graft.core.SpkiFingerprint
  */
 class PinnedTrustManager(
     private val allowedFingerprints: () -> Set<String>,
-) : X509TrustManager {
+) : PinningTrustManager {
     /** Invoked with the verified server fingerprint so callers can report the authenticated peer. */
     @Volatile
-    var onServerVerified: ((String) -> Unit)? = null
+    override var onServerVerified: ((String) -> Unit)? = null
 
     /**
      * Set when this manager itself rejected a chain, so callers can tell pin failures apart.
@@ -28,10 +28,10 @@ class PinnedTrustManager(
      * this value never outlives that attempt.
      */
     @Volatile
-    var lastRejectionWasPin: Boolean = false
+    override var lastRejectionWasPin: Boolean = false
 
     /** Clears per-attempt state before a new handshake starts on this manager. */
-    fun beginAttempt() {
+    override fun beginAttempt() {
         lastRejectionWasPin = false
     }
 

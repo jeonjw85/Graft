@@ -40,7 +40,7 @@ enum class TransportCloseReason {
  */
 class GraftClient(
     private val baseUrl: String,
-    private val trustManager: PinnedTrustManager,
+    private val trustManager: PinningTrustManager,
     private val keyManager: IdentityKeyManager,
     private val pingIntervalMillis: Long = 20_000,
 ) {

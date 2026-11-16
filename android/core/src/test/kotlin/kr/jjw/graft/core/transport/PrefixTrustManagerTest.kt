@@ -22,7 +22,7 @@ class PrefixTrustManagerTest {
         manager.checkServerTrusted(arrayOf(cert), "ECDHE_ECDSA")
 
         assertEquals(full, manager.verifiedFingerprint)
-        assertFalse(manager.lastRejectionWasPrefix)
+        assertFalse(manager.lastRejectionWasPin)
     }
 
     @Test
@@ -36,7 +36,7 @@ class PrefixTrustManagerTest {
             manager.checkServerTrusted(arrayOf(cert), "ECDHE_ECDSA")
         }
         assertNull(manager.verifiedFingerprint)
-        assertTrue(manager.lastRejectionWasPrefix)
+        assertTrue(manager.lastRejectionWasPin)
     }
 
     @Test
@@ -89,7 +89,7 @@ class PrefixTrustManagerTest {
         assertThrows(CertificateException::class.java) {
             manager.checkServerTrusted(null, "ECDHE_ECDSA")
         }
-        assertTrue(manager.lastRejectionWasPrefix)
+        assertTrue(manager.lastRejectionWasPin)
     }
 
     @Test

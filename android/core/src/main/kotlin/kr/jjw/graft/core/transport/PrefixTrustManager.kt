@@ -14,7 +14,7 @@ import kr.jjw.graft.core.SpkiFingerprint
  * a LAN. The full fingerprint is reported after a match so the app can pin it and never rely on a
  * prefix again.
  */
-class PrefixTrustManager(expectedPrefix: String) : X509TrustManager {
+class PrefixTrustManager(expectedPrefix: String) : PinningTrustManager {
     private val prefix: String = expectedPrefix
 
     /** The full fingerprint from the last accepted certificate, or null after a rejection. */
@@ -22,10 +22,18 @@ class PrefixTrustManager(expectedPrefix: String) : X509TrustManager {
     var verifiedFingerprint: String? = null
         private set
 
+    @Volatile
+    override var onServerVerified: ((String) -> Unit)? = null
+
     /** Set when this manager rejected a chain, so callers can distinguish it from a network error. */
     @Volatile
-    var lastRejectionWasPrefix: Boolean = false
+    override var lastRejectionWasPin: Boolean = false
         private set
+
+    override fun beginAttempt() {
+        verifiedFingerprint = null
+        lastRejectionWasPin = false
+    }
 
     init {
         require(isValidPrefix(prefix)) { "prefix must be 8 base64url characters" }
@@ -37,21 +45,22 @@ class PrefixTrustManager(expectedPrefix: String) : X509TrustManager {
 
     override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
         verifiedFingerprint = null
-        lastRejectionWasPrefix = false
+        lastRejectionWasPin = false
 
         val leaf = chain?.firstOrNull()
         if (leaf == null) {
-            lastRejectionWasPrefix = true
+            lastRejectionWasPin = true
             throw CertificateException("no server certificate")
         }
 
         val fingerprint = PinnedTrustManager.fingerprintOf(leaf)
         if (!fingerprint.startsWith(prefix)) {
-            lastRejectionWasPrefix = true
+            lastRejectionWasPin = true
             throw CertificateException("fingerprint prefix does not match")
         }
 
         verifiedFingerprint = fingerprint
+        onServerVerified?.invoke(fingerprint)
     }
 
     override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()

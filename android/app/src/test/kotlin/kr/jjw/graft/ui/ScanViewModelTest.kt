@@ -67,18 +67,14 @@ class ScanViewModelTest {
     }
 
     @Test
-    fun `six-digit code is refused because it carries no certificate fingerprint`() {
-        // TLS pins the Mac by SPKI. A typed code has no fingerprint to pin, so accepting it would
-        // either fail silently at the TLS layer or, worse, invite trust-on-first-use. Refuse it
-        // with an explanation instead.
+    fun `six-digit code alone points the user at the manual form`() {
+        // A code without a fingerprint prefix cannot be pinned, so the form asks for the prefix
+        // rather than silently trusting the first certificate it sees.
         val viewModel = ScanViewModel(defaultHost = "192.168.0.12")
         viewModel.onCodeEntered("042817", null)
 
         assertNull(viewModel.state.offer)
-        assertEquals(
-            "The six-digit code needs the camera path for now. Scan the QR code instead.",
-            viewModel.state.error
-        )
+        assertEquals("Enter the fingerprint prefix from your Mac as well", viewModel.state.error)
         assertTrue(viewModel.state.useManualCode)
     }
 

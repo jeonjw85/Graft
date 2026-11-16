@@ -25,6 +25,9 @@ import kr.jjw.graft.core.transport.ConnectionEvent
 import kr.jjw.graft.core.transport.GraftClient
 import kr.jjw.graft.core.transport.IdentityKeyManager
 import kr.jjw.graft.core.transport.PinnedTrustManager
+import kr.jjw.graft.core.transport.PrefixTrustManager
+import kr.jjw.graft.core.identity.ManualPairingDecision
+import kr.jjw.graft.core.transport.PinningTrustManager
 import kr.jjw.graft.core.transport.TransportCloseReason
 import kr.jjw.graft.data.AndroidKeyStoreBackend
 import kr.jjw.graft.data.PeerStore
@@ -113,15 +116,26 @@ class ConnectionService : Service() {
         val peers = PeerStore(File(filesDir, "peers.json"))
         val stored = peers.load().firstOrNull()
 
+        val manualPrefix = loadManualPrefix()
         val pin = offer.fingerprint.ifEmpty { stored?.fingerprint ?: "" }
-        if (pin.isEmpty()) {
+
+        val trustManager: PinningTrustManager
+        val prefixTrust: PrefixTrustManager?
+        if (pin.isNotEmpty()) {
+            trustManager = PinnedTrustManager { setOf(pin) }
+            prefixTrust = null
+        } else if (manualPrefix != null) {
+            val prefix = PrefixTrustManager(manualPrefix)
+            trustManager = prefix
+            prefixTrust = prefix
+        } else {
             ConnectionRepository.onEvent(ConnectionEvent.Closed(TransportCloseReason.PIN_MISMATCH))
             return Outcome.STOP
         }
 
         val sessionClient = GraftClient(
             baseUrl = "wss://${offer.host}:${offer.port}/graft",
-            trustManager = PinnedTrustManager { setOf(pin) },
+            trustManager = trustManager,
             keyManager = IdentityKeyManager(
                 "graft",
                 identity.privateKey,
@@ -166,6 +180,7 @@ class ConnectionService : Service() {
 
                         "hello.ok" -> {
                             retryAttempt = 0
+                            completeManualPairing(prefixTrust, offer)
                             flushPendingNotifications(sessionClient)
                             stored?.let { ConnectionRepository.onPeerPaired(it.name) }
                             updateNotification(stored?.name ?: "Connected")
@@ -235,15 +250,56 @@ class ConnectionService : Service() {
         updateNotification("Disconnected")
     }
 
+    /**
+     * After a manual pairing succeeds, store the full fingerprint the handshake verified so later
+     * connections use pinning instead of prefix matching.
+     */
+    private fun completeManualPairing(prefixTrust: PrefixTrustManager?, offer: PairingOffer) {
+        val prefix = loadManualPrefix() ?: return
+        val verified = prefixTrust?.verifiedFingerprint ?: return
+
+        val store = PeerStore(File(filesDir, "peers.json"))
+        val existing = store.load().firstOrNull()
+
+        when (val decision = ManualPairingDecision.decide(existing?.fingerprint, prefix, verified)) {
+            is ManualPairingDecision.Result.Pin -> {
+                store.add(
+                    kr.jjw.graft.data.PairedPeer(
+                        fingerprint = decision.fingerprint,
+                        name = offer.name,
+                        platform = "macos",
+                        pairedAtMillis = System.currentTimeMillis(),
+                    )
+                )
+                // Drop the prefix so the next attempt pins the full value.
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove("prefix").apply()
+                ConnectionRepository.onPeerPaired(offer.name)
+            }
+
+            is ManualPairingDecision.Result.AlreadyPaired -> {
+                ConnectionRepository.onEvent(ConnectionEvent.Closed(TransportCloseReason.PIN_MISMATCH))
+            }
+
+            ManualPairingDecision.Result.Unverified,
+            is ManualPairingDecision.Result.InvalidPrefix,
+            -> Unit
+        }
+    }
+
+    private fun loadManualPrefix(): String? =
+        getSharedPreferences(PREFS, MODE_PRIVATE).getString("prefix", null)
+
     private fun loadPairingOffer(): PairingOffer? {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         val host = prefs.getString("host", null) ?: return null
-        val fingerprint = prefs.getString("fingerprint", null) ?: return null
+        val fingerprint = prefs.getString("fingerprint", null)
+        val prefix = prefs.getString("prefix", null)
+        if (fingerprint.isNullOrEmpty() && prefix.isNullOrEmpty()) return null
         return PairingOffer(
             version = 1,
             host = host,
             port = prefs.getInt("port", 47800),
-            fingerprint = fingerprint,
+            fingerprint = fingerprint ?: "",
             token = prefs.getString("token", "") ?: "",
             name = prefs.getString("name", "Mac") ?: "Mac",
         )
