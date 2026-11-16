@@ -16,6 +16,11 @@ struct GraftApp: App {
                 .accessibilityLabel(service.menuState.statusLabel)
         }
         .menuBarExtraStyle(.window)
+
+        Window("Pair with a phone", id: "pairing") {
+            PairingWindowView(service: service)
+        }
+        .defaultSize(width: 420, height: 560)
     }
 }
 

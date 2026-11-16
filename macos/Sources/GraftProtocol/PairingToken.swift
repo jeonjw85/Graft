@@ -51,6 +51,14 @@ public struct PairingTokenStore {
     }
 
     /// Consumes the token if it matches, is unexpired, unused, and the budget allows it.
+    /// Drops the active token. Closing the pairing window calls this so the offer dies immediately
+    /// instead of waiting out the 120-second lifetime.
+    public mutating func revoke() {
+        current = nil
+        consumed = false
+        attempts = []
+    }
+
     public mutating func attempt(token: String, now: Date) -> Bool {
         // Check the budget before recording, otherwise the fifth legitimate attempt is always
         // rejected: recording first makes the count reach the limit one attempt too early.

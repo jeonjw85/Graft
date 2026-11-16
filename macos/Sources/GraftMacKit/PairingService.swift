@@ -31,6 +31,13 @@ public final class PairingService: @unchecked Sendable {
         self.tokens = tokens
     }
 
+    /// Drops the current offer. Used when the pairing window closes: the token must die with it.
+    public func revokePairing() {
+        lock.lock()
+        defer { lock.unlock() }
+        tokens.revoke()
+    }
+
     /// True while an unused, unexpired token exists. The TLS layer admits unknown peers only then.
     public func isPairingOpen(now: Date = Date()) -> Bool {
         lock.lock()

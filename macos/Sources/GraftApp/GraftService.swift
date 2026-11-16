@@ -213,6 +213,15 @@ final class GraftService: ObservableObject {
         menuState = MenuState(status: .pairing, peerName: nil)
     }
 
+    /// Drops the current offer and returns the popover to its normal state.
+    func cancelPairing() {
+        pairingService?.revokePairing()
+        pairingURI = nil
+        qrImage = nil
+        manualPairing = nil
+        menuState = MenuState(status: .idle, peerName: nil)
+    }
+
     func refreshPairingState(now: Date) {
         guard case .pairing = menuState.status else { return }
         guard let pairingService, !pairingService.isPairingOpen(now: now) else { return }
