@@ -107,8 +107,11 @@ is a paired peer. Both sides verify SHA-256 before the file is committed.
 - [ ] Restarting the Mac app keeps the peer listed and reconnects without a new scan.
 - [ ] Launching with a paired phone opens the Connection tab directly, with no onboarding.
 - [ ] Back on the Files or Alerts tab returns to Connection; back on Connection leaves the app.
-- [ ] A file received from the Mac appears in the Files tab and opens from its Open action.
-- [ ] The received file is visible in `Download/Graft` with the system Files app.
+- [x] A file received from the Mac appears in the Files tab and opens from its Open action. (verified on an Android 16 emulator, 2026-11-17)
+- [x] Launching with a paired phone opens the Connection tab directly, with no onboarding. (verified 2026-11-17)
+- [x] Manual pairing with the code, the eight-character fingerprint prefix, and the IP address succeeds when the camera is unavailable. (verified 2026-11-17)
+- [x] Denying the camera permission switches the screen to the manual form. (verified 2026-11-17)
+- [x] The received file is visible in `Download/Graft` via MediaStore, and the Open action reaches a system viewer. (verified 2026-11-17)
 - [ ] A file received while MediaStore is unavailable shows `Saved to app storage`.
 - [ ] Sending a file from the phone shows progress and lands in the Mac's downloads folder.
 - [ ] Sending a file while disconnected shows "Connect to your Mac first" instead of failing silently.
@@ -126,7 +129,7 @@ is a paired peer. Both sides verify SHA-256 before the file is committed.
 - [ ] Settings > Transfers lists a finished transfer with its direction, size, and reason.
 - [ ] Settings > About shows the same 43-character fingerprint the phone displays.
 - [ ] The Mac app has no light window, including the pairing and settings windows.
-- [ ] The Android app shows the onboarding screen on first launch, and skipping notification access still reaches the scan step.
+- [x] The Android app shows the onboarding screen on first launch, and skipping notification access still reaches the scan step. (verified 2026-11-17)
 - [ ] Denying the camera permission falls back to the six-digit code form.
 - [ ] Sending a 100 MB file completes and the SHA-256 matches on both sides.
 - [ ] Killing the receiver mid-transfer leaves `name.part` and no final file.

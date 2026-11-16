@@ -25,6 +25,7 @@ import kr.jjw.graft.core.identity.DeviceIdentity
 import kr.jjw.graft.core.transport.ConnectionEvent
 import kr.jjw.graft.core.transport.GraftClient
 import kr.jjw.graft.core.transport.IdentityKeyManager
+import kr.jjw.graft.core.ClientHandshake
 import kr.jjw.graft.core.TransferDirection
 import kr.jjw.graft.core.transport.PinnedTrustManager
 import kr.jjw.graft.core.transport.PrefixTrustManager
@@ -133,6 +134,11 @@ class ConnectionService : Service() {
             ConnectionRepository.onOutgoingFileResult(true, null)
         }
     }
+
+    /** A stable, app-scoped id the Mac can show; the Android ID is enough and needs no permission. */
+    private fun deviceId(): String =
+        android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID)
+            ?: "android"
 
     private fun displayName(uri: android.net.Uri): String? =
         runCatching {
@@ -276,6 +282,19 @@ class ConnectionService : Service() {
                     }
                     ConnectionRepository.onTransferProgress(sessionCoordinator.progress)
                     recordFinishedTransfers()
+                }
+
+                is ConnectionEvent.Secure -> {
+                    // TLS is up, so the handshake can start. Without this both sides wait: the Mac
+                    // for pair.request, the app for pair.ok.
+                    sessionClient.send(
+                        ClientHandshake.initial(
+                            paired = isPaired(this@ConnectionService),
+                            token = offer.token,
+                            deviceId = deviceId(),
+                            name = android.os.Build.MODEL,
+                        )
+                    )
                 }
 
                 is ConnectionEvent.Binary -> {

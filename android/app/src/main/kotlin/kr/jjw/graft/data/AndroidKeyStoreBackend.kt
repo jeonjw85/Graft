@@ -27,8 +27,20 @@ class AndroidKeyStoreBackend(context: Context) : KeyStoreBackend {
 
     override fun loadOrCreateKey(alias: String): StoredKey {
         val keyStore = keyStore()
+
+        // Keys made before identity version 4 did not authorize DIGEST_NONE, which is the raw
+        // ECDSA signature Conscrypt uses for the TLS client CertificateVerify ("Incompatible
+        // digest"). Digest authorization cannot be changed after generation, so such a key is
+        // replaced once. v0.1 has no released builds; a paired phone must pair again, which is why
+        // this happens silently rather than as a migration dialog.
+        if (keyStore.containsAlias(alias) && preferences.getInt(IDENTITY_VERSION_KEY, 1) < 4) {
+            runCatching { keyStore.deleteEntry(alias) }
+            preferences.edit().remove(certificateKey(alias)).apply()
+        }
+
         if (!keyStore.containsAlias(alias)) {
             generateKey(alias)
+            preferences.edit().putInt(IDENTITY_VERSION_KEY, 4).apply()
         }
 
         val entry = keyStore.getEntry(alias, null) as? KeyStore.PrivateKeyEntry
@@ -60,7 +72,14 @@ class AndroidKeyStoreBackend(context: Context) : KeyStoreBackend {
         generator.initialize(
             KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
                 .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
-                .setDigests(KeyProperties.DIGEST_SHA256)
+                // Conscrypt signs the already-hashed CertificateVerify with NONEwithECDSA, so the
+                // key must authorize DIGEST_NONE; the hashed variants keep software callers working.
+                .setDigests(
+                    KeyProperties.DIGEST_NONE,
+                    KeyProperties.DIGEST_SHA256,
+                    KeyProperties.DIGEST_SHA384,
+                    KeyProperties.DIGEST_SHA512,
+                )
                 .setUserAuthenticationRequired(false)
                 .build()
         )
@@ -71,5 +90,7 @@ class AndroidKeyStoreBackend(context: Context) : KeyStoreBackend {
 
     private companion object {
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
+        const val IDENTITY_VERSION_KEY = "identity-version"
     }
+
 }

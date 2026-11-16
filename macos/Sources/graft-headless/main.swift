@@ -12,6 +12,7 @@ struct Arguments {
     var host = "127.0.0.1"
     var sendPath: String?
     var receiveDir: String?
+    var numeric = false
 }
 
 func parseArguments() -> Arguments {
@@ -31,6 +32,8 @@ func parseArguments() -> Arguments {
             if let value = iterator.next() { arguments.sendPath = value }
         case "--receive-dir":
             if let value = iterator.next() { arguments.receiveDir = value }
+        case "--numeric":
+            arguments.numeric = true
         default:
             continue
         }
@@ -146,16 +149,31 @@ do {
 
     try server.start()
 
-    let pairing = service.beginPairing(
-        now: Date(),
-        host: arguments.host,
-        port: try { () throws -> UInt16 in
-            guard let port = server.port else { throw TransportError.listenerFailed }
-            return port
-        }(),
-        deviceName: arguments.deviceName
-    )
-    print("PAIRING_URI \(pairing.uri)")
+    let assignedPort = try { () throws -> UInt16 in
+        guard let port = server.port else { throw TransportError.listenerFailed }
+        return port
+    }()
+
+    if arguments.numeric {
+        // Prints what the Mac's manual pairing window shows, for device tests without a camera.
+        let manual = service.beginNumericPairing(
+            now: Date(),
+            host: arguments.host,
+            port: assignedPort,
+            deviceName: arguments.deviceName
+        )
+        print("CODE \(manual.code)")
+        print("PREFIX \(manual.fingerprintPrefix)")
+        print("ADDRESS \(manual.host):\(manual.port)")
+    } else {
+        let pairing = service.beginPairing(
+            now: Date(),
+            host: arguments.host,
+            port: assignedPort,
+            deviceName: arguments.deviceName
+        )
+        print("PAIRING_URI \(pairing.uri)")
+    }
     print("FINGERPRINT \(identity.fingerprint)")
 
     // Stay alive until the caller terminates us. Reading stdin is not an option: when the test

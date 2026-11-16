@@ -108,28 +108,34 @@ fun FilesScreen(modifier: Modifier = Modifier) {
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { ConnectionService.sendFile(context, it) } }
 
+    // Box so the snackbar can overlay the list; the column keeps the button and the list stacked.
     androidx.compose.foundation.layout.Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier.padding(horizontal = GraftSpacing.l, vertical = GraftSpacing.m),
-            verticalArrangement = Arrangement.spacedBy(GraftSpacing.s),
-        ) {
-            Button(onClick = { pickFile.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Send a file to Mac")
+        Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.padding(horizontal = GraftSpacing.l, vertical = GraftSpacing.m),
+                verticalArrangement = Arrangement.spacedBy(GraftSpacing.s),
+            ) {
+                Button(onClick = { pickFile.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Send a file to Mac")
+                }
+                state.outgoingError?.let {
+                    Text(
+                        it,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = kr.jjw.graft.ui.theme.GraftPalette.error,
+                    )
+                }
             }
-            state.outgoingError?.let {
-                Text(it, style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = kr.jjw.graft.ui.theme.GraftPalette.error)
-            }
-        }
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = GraftSpacing.l),
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = GraftSpacing.l),
             verticalArrangement = Arrangement.spacedBy(GraftSpacing.xs),
         ) {
-            if (screen.active.isNotEmpty()) {
+                if (screen.active.isNotEmpty()) {
                 item { SectionHeader("In progress") }
-                items(screen.active, key = { it.id }) { active ->
+                items(screen.active, key = { it.id.toString() }) { active ->
                     TransferRow(
                         name = active.progress.name,
                         detail = "${FilesScreenRules.percent(active.progress)}%",
@@ -138,13 +144,13 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                 }
             }
 
-            if (screen.recent.isEmpty() && screen.active.isEmpty()) {
+                if (screen.recent.isEmpty() && screen.active.isEmpty()) {
                 item {
                     EmptyState("No files yet. Files you send or receive appear here.")
                 }
-            } else if (screen.recent.isNotEmpty()) {
+                } else if (screen.recent.isNotEmpty()) {
                 item { SectionHeader("Recent") }
-                items(screen.recent, key = { it.id }) { record ->
+                items(screen.recent, key = { it.id.toString() }) { record ->
                     val openable = FilesScreenRules.canOpen(record.destination)
                     TransferRow(
                         name = record.name,
@@ -169,6 +175,7 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                     )
                 }
             }
+        }
         }
         SnackbarHost(
             hostState = snackbar,
