@@ -16,11 +16,28 @@ swift build --package-path macos --product graft-headless >/dev/null
 (cd tools/e2e && ./gradlew installDist -q >/dev/null)
 
 WORK="$(mktemp -d)"
-PORT=$(( ( RANDOM % 1000 ) + 50000 ))
-TAG="kr.jjw.graft.xfer.$(date +%s)"
+TAG="kr.jjw.graft.xfer.$(date +%s)-$RANDOM"
 LOG="$WORK/server.log"
 RECEIVE="$WORK/received"
 mkdir -p "$RECEIVE"
+
+# A random port can belong to another process, and identity creation can take a moment: pick a free
+# port and wait for the URI instead of failing on the first second.
+free_port() {
+    python3 -c 'import random, socket
+for _ in range(50):
+    port = random.randint(50000, 59999)
+    with socket.socket() as s:
+        try:
+            s.bind(("127.0.0.1", port))
+        except OSError:
+            continue
+        print(port)
+        break
+else:
+    raise SystemExit("no free port")'
+}
+PORT="$(free_port)"
 
 SERVER_PID=0
 cleanup() {
@@ -43,8 +60,13 @@ macos/.build/debug/graft-headless \
     --receive-dir "$RECEIVE" >"$LOG" 2>&1 &
 SERVER_PID=$!
 
-for _ in $(seq 1 100); do
-    grep -q PAIRING_URI "$LOG" && break
+for _ in $(seq 1 300); do
+    if grep -q PAIRING_URI "$LOG"; then break; fi
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        echo "FAIL: the headless sender exited before pairing"
+        cat "$LOG"
+        exit 1
+    fi
     sleep 0.1
 done
 
