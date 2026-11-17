@@ -84,7 +84,7 @@ opts in, so finish the setup first.
 | Category | Tools |
 | Camera permission | Optional: scans the pairing QR code; typed code works without it |
 | Notification access | User selects apps one by one; the filter runs on the phone; nothing leaves the LAN. Expect a review question |
-| Foreground service | `connectedDevice`: keeps the LAN link alive |
+| Foreground service | `connectedDevice`: keeps the LAN link alive. Declare the use case as **"Transfer data to external devices"** and attach a screen recording |
 
 ### Tester message (Korean)
 
