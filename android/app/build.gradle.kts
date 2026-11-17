@@ -1,7 +1,16 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+// Signing material lives outside the repository; without it a release build is unsigned, which
+// only the local release script produces (and it verifies the signature afterwards).
+val releaseKeys = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
 }
 
 android {
@@ -14,6 +23,24 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+    }
+
+    signingConfigs {
+        if (releaseKeys.getProperty("graft.storeFile") != null) {
+            create("release") {
+                storeFile = file(releaseKeys.getProperty("graft.storeFile"))
+                storePassword = releaseKeys.getProperty("graft.storePassword")
+                keyAlias = releaseKeys.getProperty("graft.keyAlias")
+                keyPassword = releaseKeys.getProperty("graft.keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.findByName("release")
+            isMinifyEnabled = false
+        }
     }
 
     buildFeatures {

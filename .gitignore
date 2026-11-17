@@ -72,3 +72,6 @@ coverage/
 # Patch leftovers
 *.orig
 *.rej
+
+# Release artifacts
+dist/

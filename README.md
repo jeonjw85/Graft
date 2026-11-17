@@ -2,7 +2,8 @@
 
 An open-source tool that connects a Mac and an Android phone over the same Wi-Fi network. Transfer files, share clipboard text, and mirror notifications between the two devices. Nothing leaves the local network.
 
-> **Status:** v0.1 is in development. There is no installable release yet.
+> **Status:** v0.1.0 is built and signed locally. See [install instructions](docs/install.md); the
+> macOS build is unsigned and needs the right-click Open step on first launch.
 
 ## Planned features (v0.1)
 
