@@ -8,7 +8,8 @@ Keep that file and its password backed up: losing it means losing the ability to
 - [ ] Google Play developer account (one-time fee) and app created for `kr.jjw.graft`.
 - [ ] Enrol in **Play App Signing**. The local keystore becomes the *upload key*; Google holds the
       app signing key.
-- [ ] Upload `Graft-<version>.aab` from `scripts/release.sh`.
+- [x] Upload `dist/Graft-0.1.1.aab` (versionCode 2, versionName 0.1.1) — the first Play build includes
+      the final connection-screen hierarchy shown in the store screenshots.
 - [x] Store listing assets in `release/store/`:
       - `icon-512.png` — 512×512, 32-bit PNG, no transparency
       - `feature-1024x500.png` — 1024×500, no transparency, content inside the safe area
