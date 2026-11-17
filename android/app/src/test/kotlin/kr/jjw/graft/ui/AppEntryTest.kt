@@ -28,6 +28,31 @@ class AppEntryTest {
     }
 
     @Test
+    fun `a user who disconnected is not reconnected behind their back`() {
+        assertFalse(
+            AppEntry.shouldConnect(
+                paired = true,
+                prefix = null,
+                token = null,
+                userStopped = true,
+            ),
+            "Disconnect must survive an app restart",
+        )
+    }
+
+    @Test
+    fun `reconnecting clears the stopped state`() {
+        assertTrue(
+            AppEntry.shouldConnect(
+                paired = true,
+                prefix = null,
+                token = null,
+                userStopped = false,
+            )
+        )
+    }
+
+    @Test
     fun `no pinned fingerprint starts onboarding`() {
         assertEquals(StartDestination.Onboarding, AppEntry.startDestination(paired = false))
     }

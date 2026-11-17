@@ -40,11 +40,34 @@ object ConnectionRepository {
 
     private var pairedName: String? = null
     private val transferHistory = TransferHistory()
+    private var historyStore: TransferHistoryStore? = null
 
+    /** Called once by the service so the recent list survives restarts. */
+    fun attachHistoryStore(store: TransferHistoryStore) {
+        historyStore = store
+        val restored = store.load()
+        if (restored.isNotEmpty()) {
+            _state.update { it.copy(history = restored) }
+        }
+    }
+
+    /**
+     * Drops in-memory state, as when the service starts over.
+     *
+     * The saved transfer history survives: a restart is exactly when the user wants to see where the
+     * last file went. Only [forgetHistory] deletes it.
+     */
     fun reset() {
         pairedName = null
         transferHistory.clear()
         _state.value = ConnectionUiState()
+    }
+
+    /** Deletes the saved history as well, for "Forget this Mac". */
+    fun forgetHistory() {
+        transferHistory.clear()
+        historyStore?.clear()
+        _state.update { it.copy(history = emptyList()) }
     }
 
     fun onPeerPaired(name: String) {
@@ -93,7 +116,7 @@ object ConnectionRepository {
         error: kr.jjw.graft.files.TransferFailureKind?,
         destination: String?,
     ) {
-        transferHistory.record(
+        val row = transferHistory.record(
             id = id,
             name = name,
             bytes = bytes,
@@ -101,7 +124,11 @@ object ConnectionRepository {
             error = error,
             destination = destination,
         )
-        _state.update { it.copy(history = transferHistory.list) }
+        // Merge with what was restored from disk so a restart does not drop older rows.
+        val merged = (listOf(row) + _state.value.history.filterNot { it.id == row.id && it.name == row.name })
+            .take(50)
+        _state.update { it.copy(history = merged) }
+        historyStore?.save(merged)
     }
 
     fun onClipboardReceived(text: String) {

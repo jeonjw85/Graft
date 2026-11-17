@@ -71,6 +71,9 @@ class ConnectionService : Service() {
         super.onCreate()
         instance = this
         createChannel()
+        ConnectionRepository.attachHistoryStore(
+            TransferHistoryStore(File(filesDir, "transfer-history.json"))
+        )
         networkMonitor = NetworkMonitor(this) { wake.trySend(Unit) }.also { it.start() }
         startForeground(NOTIFICATION_ID, buildNotification("Starting…"))
     }
@@ -86,12 +89,18 @@ class ConnectionService : Service() {
             }
 
             ACTION_DISCONNECT -> {
+                // Remembered so reopening the app does not immediately reconnect.
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", true).apply()
                 stopConnection()
                 stopSelf()
                 return START_NOT_STICKY
             }
 
-            else -> startConnection()
+            else -> {
+                // Connecting again is the user's choice; clear the stopped flag.
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", false).apply()
+                startConnection()
+            }
         }
         return START_STICKY
     }
@@ -487,8 +496,14 @@ class ConnectionService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Connection",
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply { description = "Keeps Graft connected to your Mac" }
+            // A permanent link indicator must never make a sound or pop up.
+            NotificationManager.IMPORTANCE_MIN,
+        ).apply {
+            description = "Shows that Graft is connected to your Mac"
+            setShowBadge(false)
+            enableVibration(false)
+            setSound(null, null)
+        }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
@@ -499,12 +514,14 @@ class ConnectionService : Service() {
             Intent(this, GraftActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        val state = ConnectionNotificationState.forStatus(text, null, transferring = false)
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Graft")
-            .setContentText(text)
+            .setContentText(state.text)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setContentIntent(open)
-            .setOngoing(true)
+            .setOngoing(state.ongoing)
+            .setOnlyAlertOnce(true)
             .build()
     }
 
@@ -534,6 +551,7 @@ class ConnectionService : Service() {
                 paired = isPaired(context),
                 prefix = prefs.getString("prefix", null),
                 token = prefs.getString("token", null),
+                userStopped = prefs.getBoolean("userStopped", false),
             )
         }
 
@@ -561,6 +579,7 @@ class ConnectionService : Service() {
                 .remove("token")
                 .apply()
             File(context.filesDir, "peers.json").delete()
+            ConnectionRepository.forgetHistory()
             stop(context)
         }
 

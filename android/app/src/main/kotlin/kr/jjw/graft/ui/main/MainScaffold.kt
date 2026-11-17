@@ -32,10 +32,16 @@ object AppTabRules {
 @Composable
 fun MainScaffold(paired: Boolean, onForget: () -> Unit) {
     var tab by remember { mutableStateOf(AppTab.Connection) }
+    var settingsOpen by remember { mutableStateOf(false) }
 
     // Back leaves the app from the first tab; from another tab it returns to the first.
     BackHandler(enabled = AppTabRules.onBack(tab) != null) {
         AppTabRules.onBack(tab)?.let { tab = it }
+    }
+
+    if (settingsOpen) {
+        SettingsScreen(onClose = { settingsOpen = false })
+        return
     }
 
     Scaffold(
@@ -57,6 +63,7 @@ fun MainScaffold(paired: Boolean, onForget: () -> Unit) {
             AppTab.Connection -> ConnectScreen(
                 paired = paired,
                 onForget = onForget,
+                onOpenSettings = { settingsOpen = true },
                 modifier = content,
             )
             AppTab.Files -> FilesScreen(modifier = content)

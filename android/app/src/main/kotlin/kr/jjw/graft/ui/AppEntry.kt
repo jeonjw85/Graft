@@ -22,6 +22,14 @@ object AppEntry {
      * A saved manual offer (prefix + token) counts: the app can be killed between typing the code
      * and the handshake finishing, and reopening it then used to do nothing at all.
      */
-    fun shouldConnect(paired: Boolean, prefix: String?, token: String?): Boolean =
-        paired || (!prefix.isNullOrEmpty() && !token.isNullOrEmpty())
+    fun shouldConnect(
+        paired: Boolean,
+        prefix: String?,
+        token: String?,
+        userStopped: Boolean = false,
+    ): Boolean {
+        // Disconnect is a decision, not an accident: reopening the app must not undo it.
+        if (userStopped) return false
+        return paired || (!prefix.isNullOrEmpty() && !token.isNullOrEmpty())
+    }
 }

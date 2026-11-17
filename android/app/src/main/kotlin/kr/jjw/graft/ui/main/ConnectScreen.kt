@@ -72,6 +72,7 @@ fun visualFor(state: ConnectionUiState): ConnectVisual = when (val status = stat
 fun ConnectScreen(
     paired: Boolean,
     onForget: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -124,15 +125,7 @@ fun ConnectScreen(
             ) {
                 Text("Forget this Mac")
             }
-
-            BackgroundReliabilityCard()
-
-            SectionHeader("Clipboard")
-            ClipboardCard(
-                received = state.lastClipboard,
-                receivedAt = state.lastClipboardAt,
-                sent = state.lastSentClipboard,
-            )
+            TextButton(onClick = onOpenSettings) { Text("Settings") }
         }
 
         if (pairingOpen) {
@@ -141,152 +134,6 @@ fun ConnectScreen(
                     pairingOpen = false
                     if (paired) ConnectionService.start(context)
                 }
-            )
-        }
-    }
-}
-
-/**
- * Optional permissions that change whether the link survives: battery optimisation can kill the
- * service, and a hidden notification means the user cannot tell it is running.
- */
-@Composable
-private fun BackgroundReliabilityCard() {
-    val context = LocalContext.current
-    val power = context.getSystemService(android.os.PowerManager::class.java)
-    val exempt = power?.isIgnoringBatteryOptimizations(context.packageName) == true
-    val notificationsGranted = androidx.core.app.NotificationManagerCompat
-        .from(context)
-        .areNotificationsEnabled()
-
-    val batteryNeeded = PermissionGuidance.shouldSuggestBatterySettings(exempt = exempt, paired = true)
-    val notificationsNeeded = PermissionGuidance.shouldSuggestNotificationSettings(
-        granted = notificationsGranted,
-        paired = true,
-    )
-    if (!batteryNeeded && !notificationsNeeded) return
-
-    Column(verticalArrangement = Arrangement.spacedBy(GraftSpacing.xs)) {
-        SectionHeader("Background")
-        if (batteryNeeded) {
-            Text(
-                "Android may stop the connection to save power. Allow Graft to run in the background.",
-                style = MaterialTheme.typography.bodySmall,
-                color = GraftPalette.onSurfaceVariant,
-            )
-            OutlinedButton(
-                onClick = {
-                    context.startActivity(
-                        android.content.Intent(
-                            android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
-                        )
-                    )
-                }
-            ) {
-                Text("Open battery settings")
-            }
-        }
-        if (notificationsNeeded) {
-            Text(
-                "Connection notifications are off, so you cannot see whether Graft is connected.",
-                style = MaterialTheme.typography.bodySmall,
-                color = GraftPalette.onSurfaceVariant,
-            )
-            OutlinedButton(
-                onClick = {
-                    context.startActivity(
-                        android.content.Intent(
-                            android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
-                        ).apply {
-                            putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
-                        }
-                    )
-                }
-            ) {
-                Text("Open notification settings")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ClipboardCard(received: String?, receivedAt: Long, sent: String?) {
-    val context = LocalContext.current
-    val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
-    val autoCopy = remember { ClipboardAutoCopy() }
-    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow
-        .collectAsStateWithLifecycle()
-    var copied by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-
-    // Writing to the clipboard is only allowed while this app is focused, and only makes sense
-    // right after the text arrives.
-    LaunchedEffect(received, receivedAt, lifecycleState) {
-        val text = received ?: return@LaunchedEffect
-        val shouldCopy = autoCopy.shouldCopy(
-            text = text,
-            arrivedAtMillis = receivedAt,
-            hasFocus = lifecycleState.isAtLeast(Lifecycle.State.RESUMED),
-            nowMillis = System.currentTimeMillis(),
-        )
-        if (shouldCopy) {
-            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Graft", text))
-            copied = true
-        }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(GraftSpacing.xs)) {
-        Text(
-            received?.take(200) ?: "Nothing received yet.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = GraftPalette.onSurfaceVariant,
-            maxLines = 2,
-        )
-        if (copied) {
-            Text(
-                "Copied to clipboard",
-                style = MaterialTheme.typography.bodySmall,
-                color = GraftPalette.onSurfaceVariant,
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(GraftSpacing.s)) {
-            if (received != null) {
-                OutlinedButton(
-                    onClick = {
-                        clipboard.setPrimaryClip(
-                            android.content.ClipData.newPlainText("Graft", received)
-                        )
-                        copied = true
-                    }
-                ) {
-                    Text("Copy")
-                }
-            }
-            Button(
-                onClick = {
-                    val text = clipboard.primaryClip
-                        ?.takeIf { it.itemCount > 0 }
-                        ?.getItemAt(0)
-                        ?.coerceToText(context)
-                        ?.toString()
-                    message = ConnectionService.sendClipboard(text)
-                }
-            ) {
-                Text("Send clipboard")
-            }
-        }
-        message?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodySmall,
-                color = GraftPalette.warning,
-            )
-        }
-        sent?.let {
-            Text(
-                "Last shared: ${it.take(80)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = GraftPalette.onSurfaceVariant,
             )
         }
     }
