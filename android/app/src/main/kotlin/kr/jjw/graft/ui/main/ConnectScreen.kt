@@ -109,11 +109,16 @@ fun ConnectScreen(
                         pairingOpen = true
                     },
                 )
-                if (connected) {
+                // A retry loop that cannot be stopped is a trap; offer the exit in both states.
+                if (state.status !is ConnectionStatus.Idle) {
                     RowDivider()
                     SettingsRow(
-                        label = "Disconnect",
-                        supporting = "Stops the link until you reconnect",
+                        label = if (connected) "Disconnect" else "Stop trying",
+                        supporting = if (connected) {
+                            "Stops the link until you reconnect"
+                        } else {
+                            "Stops reconnecting until you press Reconnect"
+                        },
                         onClick = { ConnectionService.stop(context) },
                         showChevron = false,
                     )
