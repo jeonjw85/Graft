@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Graft 개인정보처리방침 | JJW.KR</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendard-variable-dynamic-subset.min.css">
+<style>
+  :root {
+    --bg: #0a0a0a; --text: #e8e8e8; --text-dim: #9a9a9a;
+    --text-faint: #7c7c7c; --border: #1f1f1f; --accent: #e8e8e8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.75; -webkit-font-smoothing: antialiased;
+  }
+  .doc { max-width: 640px; margin: 0 auto; padding: 56px 24px 96px; }
+  .back {
+    display: inline-block; color: var(--text-faint); text-decoration: none;
+    font-size: .84rem; margin-bottom: 40px;
+  }
+  .back:hover { color: var(--text); }
+  h1 { font-size: 1.7rem; line-height: 1.3; letter-spacing: -.02em; font-weight: 600; }
+  .updated { margin-top: 14px; color: var(--text-faint); font-size: .82rem; }
+  h2 { margin-top: 2.6rem; font-size: .95rem; font-weight: 600; }
+  p, ul, ol { margin-top: .9rem; }
+  ul, ol { padding-left: 1.35rem; }
+  li { margin-top: .35rem; }
+  code {
+    background: #14171c; padding: .1em .4em; border-radius: 4px;
+    font-size: .9em; font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+  strong { font-weight: 650; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: .92rem; }
+  th, td { text-align: left; padding: .55rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-dim); font-weight: 600; }
+  hr { margin: 2.6rem 0 1.4rem; border: none; border-top: 1px solid var(--border); }
+  h3 { font-size: .95rem; font-weight: 650; }
+  @media print {
+    body { background: #fff; color: #000; }
+    .back { display: none; }
+    a { color: #000; }
+    a::after { content: " (" attr(href) ")"; font-size: .85em; color: #444; }
+  }
+</style>
+</head>
+<body>
+<main class="doc">
+  <a class="back" href="/">← jjw.kr</a>
+  <h1>Graft 개인정보처리방침</h1>
+  <p class="updated"><strong>최종 수정일:</strong> 2026년 11월 17일</p>
+
+  <p>
+    JJW(이하 "운영자")는 Mac 앱과 Android 앱 <strong>Graft</strong>(Android 패키지명
+    <code>kr.jjw.graft</code>)와 관련해 이용자의 개인정보를 중요하게 생각하며, 개인정보 보호 관련
+    법령을 준수하기 위해 다음과 같이 개인정보처리방침을 공개합니다.
+  </p>
+
+  <h2>1. Graft가 하는 일</h2>
+  <p>
+    Graft는 같은 Wi-Fi에 연결된 <strong>이용자의 Mac과 Android 기기 사이</strong>에서 파일, 클립보드
+    텍스트, 휴대폰 알림을 주고받는 도구입니다. 계정도, 운영자 서버도, 클라우드도, 중계 서버도 없습니다.
+    두 기기 사이의 통신은 이용자의 로컬 네트워크 안에서만 이루어지며, TLS로 암호화되고 상대 기기의
+    인증서 지문으로 상호 인증합니다.
+  </p>
+
+  <h2>2. 수집하는 개인정보</h2>
+  <p>운영자는 Graft를 통해 <strong>어떤 개인정보도 수집하지 않습니다.</strong></p>
+  <ul>
+    <li>이름, 이메일, 전화번호, 위치 정보를 받지 않습니다.</li>
+    <li>로그인, 광고, 분석, 추적, 오류 보고 SDK를 넣지 않습니다.</li>
+    <li>운영자 서버가 없으므로 데이터가 외부로 전송되지 않습니다.</li>
+  </ul>
+  <p>
+    이용자가 보내는 파일, 클립보드 텍스트, 알림 내용은 <strong>이용자의 두 기기 사이에서만</strong>
+    처리됩니다. 운영자는 그 내용을 볼 수 없습니다.
+  </p>
+
+  <h2>3. 기기에 저장되는 정보</h2>
+  <p>아래 정보는 운영자가 아니라 <strong>이용자의 기기 안에만</strong> 저장됩니다.</p>
+  <ul>
+    <li>페어링한 기기의 이름과 인증서 지문 — 다음 연결을 인증하기 위해 필요합니다.</li>
+    <li>앱 자신의 키 쌍 — Android는 Keystore, macOS는 키체인에 보관합니다.</li>
+    <li>최근 전송·알림 목록 — 메모리에만 있으며 앱을 종료하면 사라집니다.</li>
+    <li>알림 전달 허용 목록(Android) — 이용자가 직접 고른 앱 목록입니다.</li>
+    <li>받은 파일 — 이용자가 저장한 위치(Android는 <code>Download/Graft</code>)에 남습니다.</li>
+  </ul>
+
+  <h2>4. 보관 기간</h2>
+  <p>
+    운영자가 보관하는 개인정보는 없습니다. 기기에 저장된 위 정보는 앱을 삭제하면 함께 사라집니다.
+    받은 파일은 이용자가 저장한 위치에 남으므로, 필요하면 직접 삭제해야 합니다.
+  </p>
+
+  <h2>5. 제3자 제공 및 처리 위탁</h2>
+  <p>
+    운영자는 개인정보를 판매하거나 제3자에게 제공하지 않으며, 처리를 외부 업체에 위탁하지 않습니다.
+    앱 배포에 사용하는 Google Play 및 Apple App Store의 결제·다운로드 처리에는 각 스토어의 정책이
+    적용되며, 이는 Graft가 데이터를 전송하는 것과 무관합니다.
+  </p>
+
+  <h2>6. 권한과 거부 시 동작</h2>
+  <table>
+    <thead>
+      <tr><th>권한</th><th>사용 목적</th><th>허용하지 않으면</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>카메라 (Android)</td><td>페어링 QR 코드 스캔</td><td>6자리 코드와 지문을 직접 입력해 페어링</td></tr>
+      <tr><td>알림 접근 (Android)</td><td>이용자가 고른 앱의 알림을 Mac으로 전달</td><td>알림 전달만 사용할 수 없음</td></tr>
+      <tr><td>알림 표시 (Android)</td><td>연결 상태 표시</td><td>연결 상태를 앱 안에서만 확인</td></tr>
+      <tr><td>로컬 네트워크 (macOS)</td><td>휴대폰 검색 및 연결</td><td>페어링과 전송 불가</td></tr>
+      <tr><td>배터리 최적화 예외 (Android, 선택)</td><td>백그라운드 연결 유지</td><td>화면이 꺼지면 연결이 끊길 수 있음</td></tr>
+    </tbody>
+  </table>
+  <p>
+    모든 권한은 해당 기능에만 사용하며, 거부해도 나머지 기능은 그대로 동작합니다. 권한이 없을 때 앱은
+    무엇이 제한되는지 화면에 표시하고 설정으로 이동하는 버튼을 제공합니다.
+  </p>
+
+  <h2>7. 보안</h2>
+  <ul>
+    <li>두 기기는 TLS 1.3으로 연결하고, 상대 기기의 인증서 지문(SPKI)을 고정해 확인합니다.</li>
+    <li>페어링 토큰은 120초 동안 한 번만 사용할 수 있습니다.</li>
+    <li>이용자가 허용하지 않은 기기와는 파일을 주고받지 않습니다.</li>
+    <li>통신은 로컬 네트워크를 벗어나지 않습니다.</li>
+  </ul>
+
+  <h2>8. 아동의 개인정보</h2>
+  <p>Graft는 아동을 대상으로 하지 않으며, 아동의 개인정보를 수집하지 않습니다.</p>
+
+  <h2>9. 이용자의 권리</h2>
+  <p>
+    운영자가 보유한 개인정보가 없으므로 별도의 열람·정정 절차는 없습니다. 기기에 저장된 정보는
+    앱 삭제로 모두 제거할 수 있습니다.
+  </p>
+
+  <h2>10. 정책 변경</h2>
+  <p>
+    운영자는 관련 법령 또는 앱 변경에 따라 본 개인정보처리방침을 수정할 수 있으며, 변경 사항은 이
+    페이지를 통해 공지합니다.
+  </p>
+
+  <h2>11. 문의</h2>
+  <ul>
+    <li>운영자: JJW</li>
+    <li>앱: Graft (Android <code>kr.jjw.graft</code>, macOS <code>kr.jjw.graft.mac</code>)</li>
+    <li>웹사이트: https://jjw.kr</li>
+    <li>이 방침: https://jjw.kr/policy/graft</li>
+    <li>이메일: jjw@jjw.kr</li>
+  </ul>
+
+  <hr>
+
+  <h3>적용 대상</h3>
+  <p>
+    본 개인정보처리방침은 Mac 앱과 Android 앱 <strong>Graft</strong>에만 적용됩니다.
+    <a href="/policy">jjw.kr 웹사이트 개인정보처리방침</a>과는 별도입니다.
+  </p>
+  <p style="color: var(--text-faint); font-size: .82rem; margin-top: 1.2rem;">
+    This policy is provided in Korean. An English translation is available on request at jjw@jjw.kr.
+  </p>
+</main>
+</body>
+</html>
