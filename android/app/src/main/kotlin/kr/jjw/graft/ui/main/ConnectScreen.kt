@@ -2,7 +2,6 @@ package kr.jjw.graft.ui.main
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,11 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,18 +21,15 @@ import androidx.compose.ui.platform.LocalContext
 import kr.jjw.graft.service.ConnectionRepository
 import kr.jjw.graft.service.ConnectionService
 import kr.jjw.graft.service.ConnectionStatus
-import kr.jjw.graft.ui.PermissionGuidance
 import kr.jjw.graft.service.ConnectionUiState
-import kr.jjw.graft.clipboard.ClipboardAutoCopy
-import kr.jjw.graft.ui.components.SectionHeader
+import kr.jjw.graft.ui.components.RowDivider
+import kr.jjw.graft.ui.components.SettingsGroup
+import kr.jjw.graft.ui.components.SettingsRow
 import kr.jjw.graft.ui.components.StatusCard
 import kr.jjw.graft.ui.onboarding.PairingDialog
 import kr.jjw.graft.ui.theme.GraftPalette
 import kr.jjw.graft.ui.theme.GraftSpacing
 import kr.jjw.graft.ui.theme.StatusTone
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** What the status card says for a given connection snapshot. */
 data class ConnectVisual(val title: String, val detail: String?, val tone: StatusTone, val error: String?)
@@ -44,14 +37,14 @@ data class ConnectVisual(val title: String, val detail: String?, val tone: Statu
 fun visualFor(state: ConnectionUiState): ConnectVisual = when (val status = state.status) {
     is ConnectionStatus.Connected -> ConnectVisual(
         title = "Connected to ${state.peerName ?: status.peer}",
-        detail = "Your phone can send files, clipboard text, and alerts.",
+        detail = "Ready to send files, clipboard text, and alerts.",
         tone = StatusTone.Positive,
         error = null,
     )
     is ConnectionStatus.Connecting -> ConnectVisual(
         title = "Connecting…",
-        detail = state.lastError,
-        tone = StatusTone.Neutral,
+        detail = state.lastError ?: "Looking for your Mac on this Wi-Fi.",
+        tone = StatusTone.Warning,
         error = null,
     )
     is ConnectionStatus.Failed -> ConnectVisual(
@@ -62,7 +55,7 @@ fun visualFor(state: ConnectionUiState): ConnectVisual = when (val status = stat
     )
     ConnectionStatus.Idle -> ConnectVisual(
         title = "Not connected",
-        detail = if (state.peerName == null) "Open the Mac app to connect." else null,
+        detail = "Open Graft on your Mac to connect.",
         tone = StatusTone.Neutral,
         error = null,
     )
@@ -73,19 +66,21 @@ fun ConnectScreen(
     paired: Boolean,
     onForget: () -> Unit,
     onOpenSettings: () -> Unit,
+    onSendFile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val state by ConnectionRepository.state.collectAsState()
     var pairingOpen by remember { mutableStateOf(false) }
     val visual = visualFor(state)
+    val connected = state.status is ConnectionStatus.Connected
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(GraftSpacing.l),
-        verticalArrangement = Arrangement.spacedBy(GraftSpacing.m),
+            .padding(horizontal = GraftSpacing.l, vertical = GraftSpacing.l),
+        verticalArrangement = Arrangement.spacedBy(GraftSpacing.l),
     ) {
         StatusCard(
             title = visual.title,
@@ -94,39 +89,76 @@ fun ConnectScreen(
             error = visual.error,
         )
 
-        // Pairing another phone is rare once a link exists; it should not outrank the link itself.
-        TextButton(
-            onClick = {
-                // A live session keeps the offer it captured at connect time, so adding a phone
-                // only takes effect after the current link is closed.
-                if (paired) ConnectionService.stop(context)
-                pairingOpen = true
+        // One clear primary action per state; everything else is grouped below.
+        if (paired) {
+            Button(
+                onClick = { if (connected) onSendFile() else ConnectionService.start(context) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (connected) "Send a file to Mac" else "Reconnect")
             }
-        ) {
-            Text("Pair another phone")
         }
 
         if (paired) {
-            // Retrying only makes sense while the link is down.
-            if (state.status !is ConnectionStatus.Connected) {
-                OutlinedButton(
-                    onClick = { ConnectionService.start(context) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Reconnect")
+            SettingsGroup {
+                SettingsRow(
+                    label = "Pair another phone",
+                    supporting = "Replaces the current link",
+                    onClick = {
+                        if (paired) ConnectionService.stop(context)
+                        pairingOpen = true
+                    },
+                )
+                if (connected) {
+                    RowDivider()
+                    SettingsRow(
+                        label = "Disconnect",
+                        supporting = "Stops the link until you reconnect",
+                        onClick = { ConnectionService.stop(context) },
+                        showChevron = false,
+                    )
                 }
+                RowDivider()
+                SettingsRow(label = "Settings", onClick = onOpenSettings)
+                RowDivider()
+                SettingsRow(
+                    label = "Forget this Mac",
+                    supporting = "Removes the pairing and transfer history",
+                    destructive = true,
+                    onClick = {
+                        ConnectionService.forget(context)
+                        onForget()
+                    },
+                    showChevron = false,
+                )
             }
-            TextButton(onClick = { ConnectionService.stop(context) }) { Text("Disconnect") }
-            TextButton(
-                onClick = {
-                    ConnectionService.forget(context)
-                    onForget()
-                }
-            ) {
-                Text("Forget this Mac")
+        } else {
+            Button(onClick = { pairingOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Pair a phone")
             }
-            TextButton(onClick = onOpenSettings) { Text("Settings") }
         }
+
+        if (state.lastClipboard != null) {
+            val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+            SettingsGroup {
+                SettingsRow(
+                    label = "Copy last clipboard",
+                    supporting = state.lastClipboard?.take(60),
+                    onClick = {
+                        clipboard.setPrimaryClip(
+                            android.content.ClipData.newPlainText("Graft", state.lastClipboard)
+                        )
+                    },
+                    showChevron = false,
+                )
+            }
+        }
+
+        Text(
+            "Files and clipboard text travel only between your two devices on this network.",
+            style = MaterialTheme.typography.bodySmall,
+            color = GraftPalette.onSurfaceVariant,
+        )
 
         if (pairingOpen) {
             PairingDialog(

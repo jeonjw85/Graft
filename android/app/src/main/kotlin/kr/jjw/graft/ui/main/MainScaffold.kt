@@ -40,6 +40,8 @@ fun MainScaffold(paired: Boolean, onForget: () -> Unit) {
     }
 
     if (settingsOpen) {
+        // Back must close settings, not leave the app.
+        BackHandler(enabled = true) { settingsOpen = false }
         SettingsScreen(onClose = { settingsOpen = false })
         return
     }
@@ -64,6 +66,7 @@ fun MainScaffold(paired: Boolean, onForget: () -> Unit) {
                 paired = paired,
                 onForget = onForget,
                 onOpenSettings = { settingsOpen = true },
+                onSendFile = { tab = AppTab.Files },
                 modifier = content,
             )
             AppTab.Files -> FilesScreen(modifier = content)
