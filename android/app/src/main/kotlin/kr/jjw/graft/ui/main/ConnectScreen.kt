@@ -93,24 +93,27 @@ fun ConnectScreen(
             error = visual.error,
         )
 
-        Button(
+        // Pairing another phone is rare once a link exists; it should not outrank the link itself.
+        TextButton(
             onClick = {
                 // A live session keeps the offer it captured at connect time, so adding a phone
                 // only takes effect after the current link is closed.
                 if (paired) ConnectionService.stop(context)
                 pairingOpen = true
-            },
-            modifier = Modifier.fillMaxWidth(),
+            }
         ) {
             Text("Pair another phone")
         }
 
         if (paired) {
-            OutlinedButton(
-                onClick = { ConnectionService.start(context) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Reconnect")
+            // Retrying only makes sense while the link is down.
+            if (state.status !is ConnectionStatus.Connected) {
+                OutlinedButton(
+                    onClick = { ConnectionService.start(context) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Reconnect")
+                }
             }
             TextButton(onClick = { ConnectionService.stop(context) }) { Text("Disconnect") }
             TextButton(

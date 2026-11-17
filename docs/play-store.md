@@ -9,8 +9,12 @@ Keep that file and its password backed up: losing it means losing the ability to
 - [ ] Enrol in **Play App Signing**. The local keystore becomes the *upload key*; Google holds the
       app signing key.
 - [ ] Upload `Graft-<version>.aab` from `scripts/release.sh`.
-- [ ] Store listing: title, short and full description, screenshots (1080×1920 or larger),
-      1024×500 feature graphic, 512×512 app icon. **The repository has no store assets yet.**
+- [x] Store listing assets in `release/store/`:
+      - `icon-512.png` — 512×512, 32-bit PNG, no transparency
+      - `feature-1024x500.png` — 1024×500, no transparency, content inside the safe area
+      - `01-files.png`, `02-connection.png`, `03-alerts.png` — 1080×2400 captures of the real app
+      - `icon-1024.png` — unused master for the app bundle
+- [ ] Store listing text: title (`Graft — Mac & Android Link`), short and full description
 - [x] Privacy policy URL: https://jjw.kr/policy/graft (published 2026-11-17). The Korean page is
       the one Play links to; `docs/privacy.md` keeps the English source in this repository.
 - [ ] Data safety form: "No data collected", "No data shared". All traffic is on the local network.
