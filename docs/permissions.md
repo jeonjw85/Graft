@@ -25,6 +25,20 @@ the phone only.
 - **Accessibility** on macOS: there is no remote input feature.
 - **Location** on Android: nearby device discovery does not rely on location permission.
 
+## What the app does when a permission is missing
+
+Nothing is silently blocked. Each optional capability either falls back or tells the user what to
+fix and where:
+
+| Missing | App behaviour |
+|---|---|
+| Camera | Pairing still works with the typed code, fingerprint, and IP. After the system stops asking, the scan step says the camera is blocked and offers **Open settings**. |
+| Notification access (Android) | Alerts tab shows the state and a button to the system notification-access screen; nothing else changes. |
+| Battery optimisation (Android) | Connection tab shows a **Background** card explaining that Android may stop the link, with **Open battery settings**. |
+| App notifications (Android 13+) | Connection tab warns that the connection notification is hidden, with **Open notification settings**. |
+| Notifications (macOS) | Settings > Notifications shows the state and opens the system pane. |
+| Local network (macOS) | A failed start shows the error plus **Try again** and **Privacy Settings**. |
+
 ## When the camera is denied
 
 The pairing screen shows the manual form instead of the preview. The three values come from the Mac's

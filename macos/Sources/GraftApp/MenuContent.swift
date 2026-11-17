@@ -22,6 +22,10 @@ struct MenuContent: View {
 
             header
 
+            if case .failed = service.menuState.status {
+                errorActions
+            }
+
             if service.menuState.canPair {
                 pairingActions
             } else if service.menuState.status == .pairing {
@@ -72,6 +76,15 @@ struct MenuContent: View {
     }
 
     /// Pairing starts with the QR code; the typed values live inside the window.
+    /// Healing actions for a failed start: a retry (port freed) and the privacy pane (local network).
+    private var errorActions: some View {
+        HStack(spacing: 8) {
+            Button("Try again") { service.restart() }
+            Button("Privacy Settings") { service.openLocalNetworkSettings() }
+                .buttonStyle(.link)
+        }
+    }
+
     private var pairingActions: some View {
         Button("Pair a phone") {
             service.beginPairing()

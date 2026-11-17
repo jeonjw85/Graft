@@ -20,6 +20,31 @@ final class GraftServiceTests: XCTestCase {
         }
     }
 
+    func testRestartRecoversAfterThePortIsFreed() throws {
+        let port = try occupyFreePort()
+        let tag = temporaryIdentityTag()
+        defer { DeviceIdentity.delete(tag: tag) }
+        let service = GraftService(port: port.number, storeURL: temporaryStoreURL(), identityTag: tag)
+
+        XCTAssertThrowsError(try service.start())
+        XCTAssertEqual(service.menuState.statusLabel, "Port \(port.number) is in use")
+
+        closeProbeSocket(port.socket)
+        defer { service.stop() }
+
+        // "Try again" is a user action; the OS may take a moment to release the probe socket.
+        var recovered = false
+        for _ in 0..<10 {
+            service.restart()
+            if service.menuState.canPair {
+                recovered = true
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        XCTAssertTrue(recovered, "a recovered app must be able to pair")
+    }
+
     func testStartReturnsPairingURIWhilePairing() throws {
         let port = try occupyFreePort()
         closeProbeSocket(port.socket)

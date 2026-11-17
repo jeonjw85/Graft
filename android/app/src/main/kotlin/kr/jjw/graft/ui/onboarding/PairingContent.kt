@@ -43,7 +43,6 @@ fun PairingContent(
     val context = LocalContext.current
     val scan = remember { ScanViewModel() }
     var error by remember { mutableStateOf<String?>(null) }
-    var manual by remember { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(GraftSpacing.s)) {
         Text(
@@ -52,26 +51,23 @@ fun PairingContent(
             color = GraftPalette.onSurfaceVariant,
         )
 
-        if (!manual) {
-            QRScanner(
-                onScanned = { raw ->
-                    scan.onQRScanned(raw)
-                    val offer = scan.state.offer
-                    if (offer == null) {
-                        error = scan.state.error
-                    } else {
-                        error = null
-                        ConnectionService.savePairingOffer(context, offer)
-                        ConnectionService.start(context)
-                        onPaired()
-                    }
-                },
-                onPermissionDenied = {
-                    manual = true
-                    onPermissionDenied()
-                },
-            )
-        }
+        // The scanner keeps its own permission states (ask, blocked, camera unavailable) and shows
+        // the matching prompt in place. Hiding it on denial loses the only path back to Settings.
+        QRScanner(
+            onScanned = { raw ->
+                scan.onQRScanned(raw)
+                val offer = scan.state.offer
+                if (offer == null) {
+                    error = scan.state.error
+                } else {
+                    error = null
+                    ConnectionService.savePairingOffer(context, offer)
+                    ConnectionService.start(context)
+                    onPaired()
+                }
+            },
+            onPermissionDenied = onPermissionDenied,
+        )
 
         error?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = GraftPalette.error)

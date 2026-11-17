@@ -98,6 +98,30 @@ final class GraftService: ObservableObject {
         notifications.requestAuthorizationIfNeeded()
     }
 
+    /// Retries binding the server; the usual cause is another app holding the port until it quits.
+    func restart() {
+        stop()
+        do {
+            try start()
+        } catch {
+            // start() already published the failure; nothing else to do here.
+        }
+    }
+
+    /// Opens the Local Network privacy pane, which is what a silently failing listener needs.
+    func openLocalNetworkSettings() {
+        let candidates = [
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy",
+        ]
+        for candidate in candidates {
+            if let url = URL(string: candidate) {
+                NSWorkspace.shared.open(url)
+                return
+            }
+        }
+    }
+
     /// Opens the system pane where a denied notification permission can be re-enabled.
     func openNotificationSettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") else {

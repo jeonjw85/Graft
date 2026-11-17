@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import kr.jjw.graft.service.ConnectionRepository
 import kr.jjw.graft.service.ConnectionService
 import kr.jjw.graft.service.ConnectionStatus
+import kr.jjw.graft.ui.PermissionGuidance
 import kr.jjw.graft.service.ConnectionUiState
 import kr.jjw.graft.clipboard.ClipboardAutoCopy
 import kr.jjw.graft.ui.components.SectionHeader
@@ -121,6 +122,8 @@ fun ConnectScreen(
                 Text("Forget this Mac")
             }
 
+            BackgroundReliabilityCard()
+
             SectionHeader("Clipboard")
             ClipboardCard(
                 received = state.lastClipboard,
@@ -136,6 +139,69 @@ fun ConnectScreen(
                     if (paired) ConnectionService.start(context)
                 }
             )
+        }
+    }
+}
+
+/**
+ * Optional permissions that change whether the link survives: battery optimisation can kill the
+ * service, and a hidden notification means the user cannot tell it is running.
+ */
+@Composable
+private fun BackgroundReliabilityCard() {
+    val context = LocalContext.current
+    val power = context.getSystemService(android.os.PowerManager::class.java)
+    val exempt = power?.isIgnoringBatteryOptimizations(context.packageName) == true
+    val notificationsGranted = androidx.core.app.NotificationManagerCompat
+        .from(context)
+        .areNotificationsEnabled()
+
+    val batteryNeeded = PermissionGuidance.shouldSuggestBatterySettings(exempt = exempt, paired = true)
+    val notificationsNeeded = PermissionGuidance.shouldSuggestNotificationSettings(
+        granted = notificationsGranted,
+        paired = true,
+    )
+    if (!batteryNeeded && !notificationsNeeded) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(GraftSpacing.xs)) {
+        SectionHeader("Background")
+        if (batteryNeeded) {
+            Text(
+                "Android may stop the connection to save power. Allow Graft to run in the background.",
+                style = MaterialTheme.typography.bodySmall,
+                color = GraftPalette.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+                        )
+                    )
+                }
+            ) {
+                Text("Open battery settings")
+            }
+        }
+        if (notificationsNeeded) {
+            Text(
+                "Connection notifications are off, so you cannot see whether Graft is connected.",
+                style = MaterialTheme.typography.bodySmall,
+                color = GraftPalette.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                        ).apply {
+                            putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        }
+                    )
+                }
+            ) {
+                Text("Open notification settings")
+            }
         }
     }
 }

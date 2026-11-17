@@ -1,6 +1,7 @@
 package kr.jjw.graft.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /**
@@ -36,6 +38,24 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
  * The camera is bound only while this composable is in composition and unbound on dispose, so
  * leaving the pairing screen does not hold the camera open.
  */
+private fun Context.findActivity(): android.app.Activity? {
+    var current: Context = this
+    while (current is android.content.ContextWrapper) {
+        if (current is android.app.Activity) return current
+        current = current.baseContext
+    }
+    return null
+}
+
+private fun Context.openAppSettings() {
+    startActivity(
+        android.content.Intent(
+            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            android.net.Uri.fromParts("package", packageName, null),
+        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    )
+}
+
 @Composable
 fun QRScanner(
     onScanned: (String) -> Unit,
@@ -51,27 +71,57 @@ fun QRScanner(
         )
     }
     var bindError by remember { mutableStateOf<String?>(null) }
+    var asked by remember { mutableStateOf(false) }
+    var canAskAgain by remember { mutableStateOf(true) }
+
+    val activity = remember(context) { context.findActivity() }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { allowed ->
+        asked = true
         granted = allowed
+        canAskAgain = activity?.shouldShowRequestPermissionRationale(Manifest.permission.CAMERA) ?: true
         if (!allowed) onPermissionDenied()
     }
+
+    // Returning from Settings should re-check the grant without leaving the screen.
+    LifecycleResumeEffect(Unit) {
+        granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        onPauseOrDispose { }
+    }
+
+    val state = PermissionGuidance.cameraState(
+        granted = granted,
+        asked = asked,
+        canAskAgain = canAskAgain,
+    )
 
     // The scan step is only shown when the user reached it, so asking on entry is expected.
     LaunchedEffect(Unit) {
         if (!granted) launcher.launch(Manifest.permission.CAMERA)
     }
 
-    if (!granted) {
+    if (state != CameraPermissionState.Granted) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                "Allow camera access to scan the QR code, or use the values below.",
+                if (state == CameraPermissionState.Blocked) {
+                    "Camera access is blocked. Allow it in Settings to scan the QR code, or type " +
+                        "the values below."
+                } else {
+                    "Allow camera access to scan the QR code, or use the values below."
+                },
                 style = MaterialTheme.typography.bodySmall,
             )
-            Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) {
-                Text("Allow camera")
+            if (state == CameraPermissionState.Askable) {
+                Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) {
+                    Text("Allow camera")
+                }
+            } else {
+                Button(onClick = { context.openAppSettings() }) {
+                    Text("Open settings")
+                }
             }
         }
         return
