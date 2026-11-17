@@ -48,6 +48,65 @@ Full description:
 >
 > Everything stays on your Wi-Fi. Graft does not collect analytics or send data to any server.
 
+## Closed testing plan (new personal account)
+
+A personal developer account created after 2023-11-13 needs a closed test with **12 testers opted in
+continuously for 14 days** before production access can be requested. The clock starts when a tester
+opts in, so finish the setup first.
+
+### Order
+
+1. **Internal testing** (immediate, optional): upload the AAB, install it on one device, confirm the
+   update path with the release key.
+2. **App setup**: store listing, data safety, content rating, target audience, ads, app access,
+   privacy policy. Production access stays disabled until these are complete.
+3. **Closed testing**: create the track, add 14–15 tester emails (buffer for drop-outs), publish the
+   build, and send the opt-in link.
+4. **Wait 14 continuous days.** A tester who opts out restarts their own clock; the count is taken on
+   the day you apply.
+5. **Apply for production access** from the Dashboard and answer the three sections (closed test,
+   app value, production readiness). Review usually takes a week or less.
+
+### Answers to prepare
+
+| Console question | Answer |
+|---|---|
+| App access | All functionality is available without special access (no login) |
+| Ads | No ads |
+| Target audience | 18+; not directed at children |
+| Data safety | No data collected, no data shared. Files, clipboard text, and notifications move only between the user's own devices on their LAN |
+| Privacy policy | https://jjw.kr/policy/graft |
+| Category | Tools |
+| Camera permission | Optional: scans the pairing QR code; typed code works without it |
+| Notification access | User selects apps one by one; the filter runs on the phone; nothing leaves the LAN. Expect a review question |
+| Foreground service | `connectedDevice`: keeps the LAN link alive |
+
+### Tester message (Korean)
+
+```
+Graft 테스트에 초대합니다. Mac과 안드로이드 폰 사이에서 파일·클립보드·알림을 같은 Wi-Fi 안에서만
+주고받는 앱입니다. 계정도 서버도 없습니다.
+
+1. 아래 링크를 열고 Google 계정으로 참여를 눌러 주세요.
+   <opt-in 링크>
+2. Play 스토어에서 Graft를 설치합니다.
+3. 테스트할 것:
+   - Mac 앱에서 Pair a phone → 폰으로 QR 스캔 또는 6자리 코드 입력
+   - 폰에서 사진 한 장을 Mac으로 전송, Mac에서 폰으로 파일 전송
+   - 폰에서 글자를 복사해 Send clipboard, Mac에서 복사해 폰에서 붙여넣기
+   - 알림 허용 목록에 앱 하나를 추가하고 그 앱의 알림이 Mac에 뜨는지
+4. 문제가 있으면 스크린샷과 함께 <연락처>로 알려 주세요.
+
+중요: 14일 동안 테스트에서 나가지 말아 주세요. 중간에 나가면 참여 기간이 처음부터 다시 계산됩니다.
+```
+
+### What to watch during the test
+
+- Install and update succeed from Play (not just the sideloaded APK).
+- Pairing works on a phone that has never seen the Mac.
+- A dropped Wi-Fi reconnects within a few seconds.
+- Review feedback on the notification-access declaration; be ready to justify why the app needs it.
+
 ## Release steps
 
 1. `scripts/release.sh 0.1.0`
