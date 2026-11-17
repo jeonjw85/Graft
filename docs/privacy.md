@@ -2,6 +2,9 @@
 
 Last updated: 2026-11-17
 
+The published policy linked from Google Play is the Korean page at
+<https://jjw.kr/policy/graft>. This file is the English source for the same content.
+
 Graft connects a Mac and an Android phone on the same local network. It has no accounts, no servers,
 and no analytics.
 

@@ -11,9 +11,8 @@ Keep that file and its password backed up: losing it means losing the ability to
 - [ ] Upload `Graft-<version>.aab` from `scripts/release.sh`.
 - [ ] Store listing: title, short and full description, screenshots (1080×1920 or larger),
       1024×500 feature graphic, 512×512 app icon. **The repository has no store assets yet.**
-- [ ] Privacy policy URL: publish `release/graft-privacy.html` at `https://jjw.kr/policy/graft`
-      (same layout as the other app policies) and paste that URL. The Korean page is the one Play
-      links to; `docs/privacy.md` keeps the English source in this repository.
+- [x] Privacy policy URL: https://jjw.kr/policy/graft (published 2026-11-17). The Korean page is
+      the one Play links to; `docs/privacy.md` keeps the English source in this repository.
 - [ ] Data safety form: "No data collected", "No data shared". All traffic is on the local network.
 - [ ] Content rating questionnaire.
 
