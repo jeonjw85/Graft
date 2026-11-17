@@ -27,6 +27,8 @@ targets:
       properties:
         CFBundleName: Graft
         CFBundleDisplayName: Graft
+        CFBundleShortVersionString: "0.1.1"
+        CFBundleVersion: "2"
         LSMinimumSystemVersion: "13.0"
         LSUIElement: true
         NSLocalNetworkUsageDescription: Graft connects to your phone on this network.
