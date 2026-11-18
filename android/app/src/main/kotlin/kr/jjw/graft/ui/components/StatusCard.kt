@@ -2,15 +2,15 @@ package kr.jjw.graft.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kr.jjw.graft.ui.theme.GraftIcons
 import kr.jjw.graft.ui.theme.GraftPalette
 import kr.jjw.graft.ui.theme.GraftSpacing
 import kr.jjw.graft.ui.theme.StatusTone
@@ -35,16 +36,19 @@ fun StatusCard(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = GraftPalette.surface,
+        color = GraftPalette.surfaceVariant,
         shape = RoundedCornerShape(12.dp),
     ) {
         Row(
             modifier = Modifier.padding(GraftSpacing.l),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(GraftSpacing.m),
         ) {
-            ToneDot(tone = tone, description = title)
-            Spacer(Modifier.width(GraftSpacing.m))
-            Column(verticalArrangement = Arrangement.spacedBy(GraftSpacing.xs)) {
+            ToneBadge(tone = tone, description = title)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(GraftSpacing.xs),
+            ) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
                 detail?.let {
                     Text(
@@ -61,12 +65,22 @@ fun StatusCard(
     }
 }
 
+/** A tinted circle behind the status icon: colour carries the tone, the icon repeats it. */
 @Composable
-private fun ToneDot(tone: StatusTone, description: String) {
-    androidx.compose.foundation.layout.Box(
+private fun ToneBadge(tone: StatusTone, description: String) {
+    val color = GraftPalette.colorFor(tone)
+    Box(
         modifier = Modifier
-            .size(10.dp)
-            .background(GraftPalette.colorFor(tone), CircleShape)
+            .size(40.dp)
+            .background(color.copy(alpha = 0.16f), CircleShape)
             .semantics { contentDescription = description },
-    )
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = GraftIcons.forTone(tone),
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(22.dp),
+        )
+    }
 }

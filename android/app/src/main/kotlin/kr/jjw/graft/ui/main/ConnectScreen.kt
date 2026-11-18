@@ -82,6 +82,8 @@ fun ConnectScreen(
             .padding(horizontal = GraftSpacing.l, vertical = GraftSpacing.xl),
         verticalArrangement = Arrangement.spacedBy(GraftSpacing.l),
     ) {
+        Text("Connection", style = MaterialTheme.typography.headlineSmall)
+
         StatusCard(
             title = visual.title,
             detail = visual.detail,
@@ -124,7 +126,11 @@ fun ConnectScreen(
                     )
                 }
                 RowDivider()
-                SettingsRow(label = "Settings", onClick = onOpenSettings)
+                SettingsRow(
+                    label = "Settings",
+                    supporting = "Background, clipboard, alerts, about",
+                    onClick = onOpenSettings,
+                )
                 RowDivider()
                 SettingsRow(
                     label = "Forget this Mac",
@@ -160,7 +166,7 @@ fun ConnectScreen(
         }
 
         Text(
-            "Files and clipboard text travel only between your two devices on this network.",
+            "Everything stays on your Wi-Fi. No account, no cloud.",
             style = MaterialTheme.typography.bodySmall,
             color = GraftPalette.onSurfaceVariant,
         )

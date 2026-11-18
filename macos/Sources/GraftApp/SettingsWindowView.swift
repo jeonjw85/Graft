@@ -1,7 +1,10 @@
 import SwiftUI
 import GraftMacKit
 
-/// The four settings pages, sized for a window rather than a popover.
+/// The four settings pages.
+///
+/// Each page is a grouped `Form`, so rows sit in cards with native insets and the window matches
+/// System Settings instead of stacking loose controls against the top edge.
 struct SettingsWindowView: View {
     @ObservedObject var service: GraftService
 
@@ -16,65 +19,73 @@ struct SettingsWindowView: View {
             AboutSettingsPage(service: service)
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .padding(20)
-        .frame(width: 460, height: 420)
-        .background(Palette.background)
+        .frame(width: 520, height: 480)
     }
 }
 
 struct NotificationsSettingsPage: View {
     @ObservedObject var service: GraftService
 
+    private var allowed: Bool { service.notificationsAllowed != false }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Toggle(
-                "Show notification previews",
-                isOn: Binding(
-                    get: { service.notificationPreviews },
-                    set: { service.updateNotificationPreview(enabled: $0) }
+        Form {
+            Section {
+                Toggle(
+                    "Show notification previews",
+                    isOn: Binding(
+                        get: { service.notificationPreviews },
+                        set: { service.updateNotificationPreview(enabled: $0) }
+                    )
                 )
-            )
-            .toggleStyle(.checkbox)
-            Text("When off, alerts still appear but without their text.")
-                .font(.caption)
-                .foregroundStyle(Palette.onSurfaceVariant)
 
-            Text(service.notificationStatus)
-                .font(.callout)
-                .foregroundStyle(service.notificationsAllowed == false ? Palette.warning : Palette.onSurfaceVariant)
-
-            if service.notificationsAllowed == false {
-                Button("Open Notification Settings") { service.openNotificationSettings() }
-            }
-
-            Divider()
-
-            HStack {
-                Text("Recent alerts").font(.caption).foregroundStyle(Palette.onSurfaceVariant)
-                Spacer()
-                Button("Clear") { service.clearRecentNotifications() }
-                    .disabled(service.recentNotifications.isEmpty)
-            }
-
-            if service.recentNotifications.isEmpty {
-                Text("Nothing forwarded yet.")
-                    .font(.callout)
-                    .foregroundStyle(Palette.onSurfaceVariant)
-            } else {
-                // Alerts can arrive with no timestamp; index them so List identity stays unique.
-                List(Array(service.recentNotifications.prefix(20).enumerated()), id: \.offset) { _, item in
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(item.app).font(.caption.bold())
-                        Text(item.title.isEmpty ? item.body : "\(item.title) — \(item.body)")
-                            .font(.caption)
-                            .foregroundStyle(Palette.onSurfaceVariant)
-                            .lineLimit(1)
+                LabeledContent("Access") {
+                    HStack(spacing: 6) {
+                        Image(systemName: allowed ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .foregroundStyle(allowed ? Palette.connected : Palette.warning)
+                        Text(service.notificationStatus)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .frame(minHeight: 140)
+
+                if !allowed {
+                    Button("Open Notification Settings") { service.openNotificationSettings() }
+                }
+            } footer: {
+                Text("When previews are off, alerts still arrive without their text.")
             }
-            Spacer()
+
+            Section {
+                if service.recentNotifications.isEmpty {
+                    Text("Nothing forwarded yet.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    // Alerts can arrive with no timestamp; index them so identity stays unique.
+                    ForEach(
+                        Array(service.recentNotifications.prefix(20).enumerated()),
+                        id: \.offset
+                    ) { _, item in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.app)
+                                .font(.caption.weight(.semibold))
+                            Text(item.title.isEmpty ? item.body : "\(item.title) — \(item.body)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Recent alerts")
+                    Spacer()
+                    Button("Clear") { service.clearRecentNotifications() }
+                        .buttonStyle(.link)
+                        .disabled(service.recentNotifications.isEmpty)
+                }
+            }
         }
+        .formStyle(.grouped)
     }
 }
 
@@ -82,22 +93,28 @@ struct ClipboardSettingsPage: View {
     @ObservedObject var service: GraftService
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Toggle("Copy received clipboard automatically", isOn: $service.autoCopyClipboard)
-                .toggleStyle(.checkbox)
-            Text("Only while the Mac app is in front; a text that arrived earlier is never pasted over what you copied since.")
-                .font(.caption)
-                .foregroundStyle(Palette.onSurfaceVariant)
+        Form {
+            Section {
+                Toggle("Copy received clipboard automatically", isOn: $service.autoCopyClipboard)
+            } footer: {
+                Text(
+                    "Only while the Mac app is in front; text that arrived earlier is never pasted " +
+                    "over what you copied since."
+                )
+            }
 
-            Divider()
-
-            Text("Last sent").font(.caption).foregroundStyle(Palette.onSurfaceVariant)
-            Text(service.lastSharedClipboard ?? "Nothing sent yet.")
-                .font(.callout)
-                .textSelection(.enabled)
-                .lineLimit(4)
-            Spacer()
+            Section("Last sent") {
+                if let last = service.lastSharedClipboard {
+                    Text(last)
+                        .textSelection(.enabled)
+                        .lineLimit(6)
+                } else {
+                    Text("Nothing sent yet.")
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
+        .formStyle(.grouped)
     }
 }
 
@@ -105,28 +122,26 @@ struct TransfersSettingsPage: View {
     @ObservedObject var service: GraftService
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(service.receiveDirectory.path)
-                    .font(.caption)
-                    .foregroundStyle(Palette.onSurfaceVariant)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer()
-                Button("Reveal in Finder") { service.revealReceiveDirectory() }
+        Form {
+            Section("Save received files to") {
+                HStack(spacing: 8) {
+                    Text(service.receiveDirectory.path)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                    Spacer()
+                    Button("Reveal") { service.revealReceiveDirectory() }
+                }
             }
 
-            Divider()
-
-            if service.transferHistory.isEmpty {
-                Text("No transfers yet.")
-                    .font(.callout)
-                    .foregroundStyle(Palette.onSurfaceVariant)
-            } else {
-                List(service.transferHistory, id: \.finishedAt) { record in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(record.name).font(.callout)
+            Section("History") {
+                if service.transferHistory.isEmpty {
+                    Text("No transfers yet.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(service.transferHistory.enumerated()), id: \.offset) { _, record in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(record.name)
                             Text(
                                 "\(TransferHistory.describe(record.direction))  ·  " +
                                 "\(Self.size(record.bytes))  ·  " +
@@ -135,13 +150,11 @@ struct TransfersSettingsPage: View {
                             .font(.caption)
                             .foregroundStyle(record.failure == nil ? Palette.onSurfaceVariant : Palette.warning)
                         }
-                        Spacer()
                     }
                 }
-                .frame(minHeight: 200)
             }
-            Spacer()
         }
+        .formStyle(.grouped)
     }
 
     static func size(_ bytes: UInt64) -> String {
@@ -160,28 +173,31 @@ struct AboutSettingsPage: View {
     @ObservedObject var service: GraftService
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(service.versionText).font(.headline)
-            Text("Protocol 1").font(.caption).foregroundStyle(Palette.onSurfaceVariant)
-
-            Divider()
-
-            Text("Certificate fingerprint").font(.caption).foregroundStyle(Palette.onSurfaceVariant)
-            Text(service.localFingerprint.isEmpty ? "Unavailable" : service.localFingerprint)
-                .font(.system(size: 12, design: .monospaced))
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Copy fingerprint") {
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(service.localFingerprint, forType: .string)
+        Form {
+            Section {
+                LabeledContent("Version", value: service.versionText)
+                LabeledContent("Protocol", value: "1")
             }
-            .disabled(service.localFingerprint.isEmpty)
 
-            Divider()
+            Section("Certificate fingerprint") {
+                Text(service.localFingerprint.isEmpty ? "Unavailable" : service.localFingerprint)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            Link("github.com/jeonjw85/Graft", destination: URL(string: "https://github.com/jeonjw85/Graft")!)
-            Spacer()
+                Button("Copy fingerprint") {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(service.localFingerprint, forType: .string)
+                }
+                .disabled(service.localFingerprint.isEmpty)
+            }
+
+            Section("Links") {
+                Link("Source code on GitHub", destination: URL(string: "https://github.com/jeonjw85/Graft")!)
+                Link("Privacy policy", destination: URL(string: "https://jjw.kr/policy/graft")!)
+            }
         }
+        .formStyle(.grouped)
     }
 }
