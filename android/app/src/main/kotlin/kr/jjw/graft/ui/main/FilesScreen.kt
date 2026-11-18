@@ -3,33 +3,50 @@ package kr.jjw.graft.ui.main
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kr.jjw.graft.core.TransferDirection
 import kr.jjw.graft.files.TransferProgress
 import kr.jjw.graft.service.ConnectionRepository
 import kr.jjw.graft.service.ConnectionService
+import kr.jjw.graft.service.TransferHistory
+import kr.jjw.graft.service.TransferOutcome
 import kr.jjw.graft.service.TransferRecord
 import kr.jjw.graft.ui.components.EmptyState
 import kr.jjw.graft.ui.components.SectionHeader
-import kr.jjw.graft.ui.components.TransferRow
+import kr.jjw.graft.ui.theme.GraftPalette
 import kr.jjw.graft.ui.theme.GraftSpacing
 
 /** An in-flight transfer together with the id the protocol assigned it. */
@@ -50,7 +67,6 @@ object FilesScreenRules {
     ): FilesScreenState {
         val finished = history.map { it.id }.toSet()
         return FilesScreenState(
-            // A finished transfer is represented by its history row, not by a stuck progress row.
             active = transfers
                 .filterKeys { it !in finished }
                 .entries
@@ -60,7 +76,6 @@ object FilesScreenRules {
         )
     }
 
-    /** Whole percent, clamped; an empty file that completed reads 100 %. */
     fun percent(progress: TransferProgress): Int {
         if (progress.total == 0L) return 100
         return (progress.fraction.coerceIn(0.0, 1.0) * 100).toInt()
@@ -78,15 +93,34 @@ object FilesScreenRules {
         return "%.1f %s".format(value, units[unit])
     }
 
-    /** Only a content URI can be handed to another app; an app-private path cannot. */
     fun canOpen(destination: String?): Boolean =
         destination != null && destination.startsWith("content://")
 
-    fun detail(record: TransferRecord): String {
+    /** A short label for the file tile, taken from the extension. */
+    fun badgeFor(name: String): String {
+        val extension = name.substringAfterLast('.', missingDelimiterValue = "")
+        return if (extension.isEmpty() || extension.length > 4) "FILE" else extension.uppercase()
+    }
+
+    fun relativeTime(nowMillis: Long, thenMillis: Long): String {
+        val delta = (nowMillis - thenMillis).coerceAtLeast(0)
+        val minutes = delta / 60_000
+        val hours = delta / 3_600_000
+        val days = delta / 86_400_000
+        return when {
+            delta < 60_000 -> "just now"
+            minutes < 60 -> "$minutes min ago"
+            hours < 24 -> "$hours h ago"
+            else -> "$days d ago"
+        }
+    }
+
+    fun detail(record: TransferRecord, nowMillis: Long = System.currentTimeMillis()): String {
         val parts = mutableListOf<String>()
-        if (record.outcome == kr.jjw.graft.service.TransferOutcome.Failed) parts += record.reason
+        if (record.outcome == TransferOutcome.Failed) parts += record.reason
         parts += if (record.direction == TransferDirection.receive) "Received" else "Sent"
         parts += formatSize(record.bytes)
+        parts += relativeTime(nowMillis, record.finishedAtMillis)
         val base = parts.joinToString("  ·  ")
         return if (record.destination != null && !canOpen(record.destination)) {
             "$base  ·  Saved to app storage"
@@ -108,78 +142,161 @@ fun FilesScreen(modifier: Modifier = Modifier) {
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { ConnectionService.sendFile(context, it) } }
 
-    // Box so the snackbar can overlay the list; the column keeps the button and the list stacked.
-    androidx.compose.foundation.layout.Box(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier.padding(horizontal = GraftSpacing.l, vertical = GraftSpacing.m),
-                verticalArrangement = Arrangement.spacedBy(GraftSpacing.s),
-            ) {
-                Button(onClick = { pickFile.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = GraftSpacing.l),
+            verticalArrangement = Arrangement.spacedBy(GraftSpacing.s),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                top = GraftSpacing.l,
+                bottom = GraftSpacing.xl,
+            ),
+        ) {
+            item {
+                Text("Files", style = MaterialTheme.typography.headlineSmall)
+            }
+            item {
+                Button(
+                    onClick = { pickFile.launch(arrayOf("*/*")) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text("Send a file to Mac")
                 }
-                state.outgoingError?.let {
-                    Text(
-                        it,
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = kr.jjw.graft.ui.theme.GraftPalette.error,
-                    )
-                }
             }
-
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = GraftSpacing.l),
-            verticalArrangement = Arrangement.spacedBy(GraftSpacing.xs),
-        ) {
-                if (screen.active.isNotEmpty()) {
-                item { SectionHeader("In progress") }
-                items(screen.active, key = { it.id.toString() }) { active ->
-                    TransferRow(
-                        name = active.progress.name,
-                        detail = "${FilesScreenRules.percent(active.progress)}%",
-                        progress = active.progress.fraction.toFloat(),
-                    )
-                }
-            }
-
-                if (screen.recent.isEmpty() && screen.active.isEmpty()) {
+            state.outgoingError?.let { message ->
                 item {
-                    EmptyState("No files yet. Files you send or receive appear here.")
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = GraftPalette.error,
+                    )
                 }
-                } else if (screen.recent.isNotEmpty()) {
-                item { SectionHeader("Recent") }
+            }
+
+            if (screen.active.isNotEmpty()) {
+                item { SectionHeader("In progress") }
+                items(screen.active, key = { "active-${it.id}" }) { active ->
+                    SettingsCard {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(GraftSpacing.l),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(GraftSpacing.m),
+                        ) {
+                            FileTile(label = FilesScreenRules.badgeFor(active.progress.name))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    active.progress.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Spacer(Modifier.height(GraftSpacing.xs))
+                                LinearProgressIndicator(
+                                    progress = { active.progress.fraction.toFloat().coerceIn(0f, 1f) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Text(
+                                    "${FilesScreenRules.percent(active.progress)}%  ·  " +
+                                        FilesScreenRules.formatSize(active.progress.total),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = GraftPalette.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item { SectionHeader("Recent") }
+            if (screen.recent.isEmpty()) {
+                item { EmptyState("No files yet. Files you send or receive appear here.") }
+            } else {
                 items(screen.recent, key = { it.id.toString() }) { record ->
                     val openable = FilesScreenRules.canOpen(record.destination)
-                    TransferRow(
-                        name = record.name,
-                        detail = FilesScreenRules.detail(record),
-                        progress = null,
-                        onOpen = if (openable) {
-                            {
-                                val opened = runCatching {
-                                    context.startActivity(
-                                        Intent(Intent.ACTION_VIEW)
-                                            .setDataAndType(android.net.Uri.parse(record.destination), "*/*")
-                                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    )
-                                }
-                                if (opened.isFailure) {
-                                    scope.launch { snackbar.showSnackbar("No app can open this file") }
-                                }
+                    SettingsCard {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(GraftSpacing.l),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(GraftSpacing.m),
+                        ) {
+                            FileTile(label = FilesScreenRules.badgeFor(record.name))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    record.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    FilesScreenRules.detail(record),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (record.outcome == TransferOutcome.Failed) {
+                                        GraftPalette.error
+                                    } else {
+                                        GraftPalette.onSurfaceVariant
+                                    },
+                                )
                             }
-                        } else {
-                            null
-                        },
-                    )
+                            if (openable) {
+                                TextButton(
+                                    onClick = {
+                                        val opened = runCatching {
+                                            context.startActivity(
+                                                Intent(Intent.ACTION_VIEW)
+                                                    .setDataAndType(
+                                                        android.net.Uri.parse(record.destination),
+                                                        "*/*",
+                                                    )
+                                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            )
+                                        }
+                                        if (opened.isFailure) {
+                                            scope.launch {
+                                                snackbar.showSnackbar("No app can open this file")
+                                            }
+                                        }
+                                    }
+                                ) { Text("Open") }
+                            }
+                        }
+                    }
                 }
             }
-        }
         }
         SnackbarHost(
             hostState = snackbar,
-            modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
+    }
+}
+
+@Composable
+private fun SettingsCard(content: @Composable () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = GraftPalette.surfaceVariant,
+        shape = RoundedCornerShape(12.dp),
+    ) { content() }
+}
+
+/** A coloured tile with the extension, so a list of files is scannable without artwork. */
+@Composable
+private fun FileTile(label: String) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .background(GraftPalette.surface, RoundedCornerShape(10.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = GraftPalette.primary,
         )
     }
 }

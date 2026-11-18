@@ -108,7 +108,14 @@ fun AlertsScreen(modifier: Modifier = Modifier) {
             .fillMaxSize()
             .padding(horizontal = GraftSpacing.l),
         verticalArrangement = Arrangement.spacedBy(GraftSpacing.s),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            top = GraftSpacing.l,
+            bottom = GraftSpacing.xl,
+        ),
     ) {
+        item {
+            Text("Alerts", style = MaterialTheme.typography.headlineSmall)
+        }
         item {
             AccessCard(
                 granted = state.accessGranted,

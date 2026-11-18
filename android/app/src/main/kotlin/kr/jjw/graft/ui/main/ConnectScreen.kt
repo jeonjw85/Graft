@@ -79,7 +79,7 @@ fun ConnectScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = GraftSpacing.l, vertical = GraftSpacing.l),
+            .padding(horizontal = GraftSpacing.l, vertical = GraftSpacing.xl),
         verticalArrangement = Arrangement.spacedBy(GraftSpacing.l),
     ) {
         StatusCard(

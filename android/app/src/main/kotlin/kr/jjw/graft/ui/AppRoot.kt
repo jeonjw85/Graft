@@ -26,6 +26,15 @@ fun AppRoot() {
     var paired by remember { mutableStateOf(ConnectionService.isPaired(context)) }
     val connection by ConnectionRepository.state.collectAsState()
 
+    // The transfer list is useful even while disconnected, so it loads with the app, not the service.
+    LaunchedEffect(Unit) {
+        ConnectionRepository.attachHistoryStore(
+            java.io.File(context.filesDir, "transfer-history.json").let {
+                kr.jjw.graft.service.TransferHistoryStore(it)
+            }
+        )
+    }
+
     LaunchedEffect(connection.status) {
         if (connection.status is ConnectionStatus.Connected) paired = true
     }

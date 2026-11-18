@@ -71,9 +71,6 @@ class ConnectionService : Service() {
         super.onCreate()
         instance = this
         createChannel()
-        ConnectionRepository.attachHistoryStore(
-            TransferHistoryStore(File(filesDir, "transfer-history.json"))
-        )
         networkMonitor = NetworkMonitor(this) { wake.trySend(Unit) }.also { it.start() }
         startForeground(NOTIFICATION_ID, buildNotification("Starting…"))
     }

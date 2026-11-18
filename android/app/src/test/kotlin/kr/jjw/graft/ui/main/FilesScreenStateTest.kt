@@ -120,22 +120,28 @@ class FilesScreenStateTest {
 
     @Test
     fun `an app storage row says so`() {
+        val row = record(1u, destination = "/data/a.txt")
         assertEquals(
-            "Received  ·  1.0 KB  ·  Saved to app storage",
-            FilesScreenRules.detail(record(1u, destination = "/data/a.txt")),
+            "Received  ·  1.0 KB  ·  just now  ·  Saved to app storage",
+            FilesScreenRules.detail(row, nowMillis = row.finishedAtMillis),
         )
     }
 
     @Test
     fun `a downloads row names the direction and size`() {
-        assertEquals("Received  ·  1.0 KB", FilesScreenRules.detail(record(1u)))
+        val row = record(1u)
+        assertEquals(
+            "Received  ·  1.0 KB  ·  just now",
+            FilesScreenRules.detail(row, nowMillis = row.finishedAtMillis),
+        )
     }
 
     @Test
     fun `a failed row leads with the reason`() {
+        val row = record(1u, reason = TransferFailureKind.HASH_MISMATCH)
         assertEquals(
-            "Hash mismatch  ·  Received  ·  1.0 KB",
-            FilesScreenRules.detail(record(1u, reason = TransferFailureKind.HASH_MISMATCH)),
+            "Hash mismatch  ·  Received  ·  1.0 KB  ·  just now",
+            FilesScreenRules.detail(row, nowMillis = row.finishedAtMillis),
         )
     }
 }
