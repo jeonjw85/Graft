@@ -4,7 +4,7 @@ import java.io.File
 import kr.jjw.graft.core.TransferDirection
 import kr.jjw.graft.files.TransferFailureKind
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 /**
@@ -16,14 +16,14 @@ import org.junit.jupiter.api.Test
 class HistoryPersistenceTest {
     private val file = File.createTempFile("graft-persist", ".json").also { it.delete() }
 
-    @AfterEach
-    fun cleanUp() {
-        file.delete()
+    @BeforeEach
+    fun startClean() {
+        // History now outlives a reset, so clear both the file and the memory between tests.
+        ConnectionRepository.forgetHistory()
     }
 
     @Test
     fun `a finished transfer is still listed after the service restarts`() {
-        ConnectionRepository.reset()
         ConnectionRepository.attachHistoryStore(TransferHistoryStore(file))
         ConnectionRepository.onTransferFinished(
             id = 1u,
@@ -33,23 +33,21 @@ class HistoryPersistenceTest {
             error = null,
             destination = "content://media/external/downloads/12",
         )
-        assertEquals(1, ConnectionRepository.state.value.history.size)
 
-        // A new process: fresh repository, same file.
+        val onDisk = TransferHistoryStore(file).load()
+        assertEquals(1, onDisk.size)
+        assertEquals("design-spec.jpg", onDisk.first().name)
+        assertEquals(45_600, onDisk.first().bytes)
+        assertEquals("content://media/external/downloads/12", onDisk.first().destination)
+        assertEquals(TransferOutcome.Completed, onDisk.first().outcome)
+
+        // The service starting over resets the session, not the list the user is looking at.
         ConnectionRepository.reset()
-        ConnectionRepository.attachHistoryStore(TransferHistoryStore(file))
-        val restored = ConnectionRepository.state.value.history
-
-        assertEquals(1, restored.size)
-        assertEquals("design-spec.jpg", restored.first().name)
-        assertEquals(45_600, restored.first().bytes)
-        assertEquals("content://media/external/downloads/12", restored.first().destination)
-        assertEquals(TransferOutcome.Completed, restored.first().outcome)
+        assertEquals(1, ConnectionRepository.state.value.history.size)
     }
 
     @Test
     fun `a failed transfer keeps its reason across a restart`() {
-        ConnectionRepository.reset()
         ConnectionRepository.attachHistoryStore(TransferHistoryStore(file))
         ConnectionRepository.onTransferFinished(
             id = 2u,
@@ -60,11 +58,27 @@ class HistoryPersistenceTest {
             destination = null,
         )
 
-        ConnectionRepository.reset()
-        ConnectionRepository.attachHistoryStore(TransferHistoryStore(file))
-
-        val row = ConnectionRepository.state.value.history.single()
+        val row = TransferHistoryStore(file).load().single()
         assertEquals("Hash mismatch", row.reason)
         assertEquals(TransferOutcome.Failed, row.outcome)
+    }
+
+    @Test
+    fun `disconnecting keeps the rows already shown`() {
+        ConnectionRepository.attachHistoryStore(TransferHistoryStore(file))
+        ConnectionRepository.onTransferFinished(
+            id = 3u,
+            name = "notes.txt",
+            bytes = 12,
+            direction = TransferDirection.send,
+            error = null,
+            destination = null,
+        )
+
+        ConnectionRepository.onStopped()
+
+        val row = ConnectionRepository.state.value.history.single()
+        assertEquals("notes.txt", row.name)
+        assertEquals(TransferDirection.send, row.direction)
     }
 }

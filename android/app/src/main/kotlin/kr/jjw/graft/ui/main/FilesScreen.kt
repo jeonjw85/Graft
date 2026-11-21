@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,29 +23,33 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kr.jjw.graft.core.TransferDirection
 import kr.jjw.graft.files.TransferProgress
 import kr.jjw.graft.service.ConnectionRepository
 import kr.jjw.graft.service.ConnectionService
-import kr.jjw.graft.service.TransferHistory
+import kr.jjw.graft.service.TRANSFER_HISTORY_LIMIT
 import kr.jjw.graft.service.TransferOutcome
 import kr.jjw.graft.service.TransferRecord
 import kr.jjw.graft.ui.components.EmptyState
 import kr.jjw.graft.ui.components.SectionHeader
+import kr.jjw.graft.ui.components.SettingsGroup
 import kr.jjw.graft.ui.theme.GraftPalette
 import kr.jjw.graft.ui.theme.GraftSpacing
 
@@ -59,16 +63,18 @@ data class FilesScreenState(
 
 /** Pure shaping of repository state into what the Files tab draws. */
 object FilesScreenRules {
-    const val MAX_RECENT = 50
+    val MAX_RECENT = TRANSFER_HISTORY_LIMIT
 
     fun from(
         transfers: Map<UInt, TransferProgress>,
         history: List<TransferRecord>,
     ): FilesScreenState {
-        val finished = history.map { it.id }.toSet()
+        // Match on the whole transfer, not the id: ids are only unique per session.
+        val finished = history.map { Triple(it.id, it.name, it.direction) }.toSet()
         return FilesScreenState(
-            active = transfers
-                .filterKeys { it !in finished }
+            active = transfers.filter { (id, progress) ->
+                Triple(id, progress.name, progress.direction) !in finished
+            }
                 .entries
                 .sortedBy { it.key }
                 .map { ActiveTransfer(it.key, it.value) },
@@ -138,6 +144,15 @@ fun FilesScreen(modifier: Modifier = Modifier) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // Ages are read from this clock, so a row left on screen does not keep saying "just now".
+    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            nowMillis = System.currentTimeMillis()
+        }
+    }
+
     val pickFile = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { ConnectionService.sendFile(context, it) } }
@@ -148,8 +163,8 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                 .fillMaxSize()
                 .padding(horizontal = GraftSpacing.l),
             verticalArrangement = Arrangement.spacedBy(GraftSpacing.s),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                top = GraftSpacing.l,
+            contentPadding = PaddingValues(
+                top = GraftSpacing.xl,
                 bottom = GraftSpacing.xl,
             ),
         ) {
@@ -177,7 +192,7 @@ fun FilesScreen(modifier: Modifier = Modifier) {
             if (screen.active.isNotEmpty()) {
                 item { SectionHeader("In progress") }
                 items(screen.active, key = { "active-${it.id}" }) { active ->
-                    SettingsCard {
+                    SettingsGroup {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -199,8 +214,12 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 Text(
-                                    "${FilesScreenRules.percent(active.progress)}%  ·  " +
-                                        FilesScreenRules.formatSize(active.progress.total),
+                                    if (active.progress.total == 0L) {
+                                        "Finishing…"
+                                    } else {
+                                        "${FilesScreenRules.percent(active.progress)}%  ·  " +
+                                            FilesScreenRules.formatSize(active.progress.total)
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = GraftPalette.onSurfaceVariant,
                                 )
@@ -216,7 +235,7 @@ fun FilesScreen(modifier: Modifier = Modifier) {
             } else {
                 items(screen.recent, key = { it.id.toString() }) { record ->
                     val openable = FilesScreenRules.canOpen(record.destination)
-                    SettingsCard {
+                    SettingsGroup {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -233,7 +252,7 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
-                                    FilesScreenRules.detail(record),
+                                    FilesScreenRules.detail(record, nowMillis),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (record.outcome == TransferOutcome.Failed) {
                                         GraftPalette.error
@@ -273,15 +292,6 @@ fun FilesScreen(modifier: Modifier = Modifier) {
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
-}
-
-@Composable
-private fun SettingsCard(content: @Composable () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = GraftPalette.surfaceVariant,
-        shape = RoundedCornerShape(12.dp),
-    ) { content() }
 }
 
 /** A coloured tile with the extension, so a list of files is scannable without artwork. */

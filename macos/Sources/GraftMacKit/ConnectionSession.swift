@@ -33,6 +33,11 @@ public final class ConnectionSession: @unchecked Sendable {
         _ = apply(machine.handle(.tlsReady(peerFingerprint: peerFingerprint ?? "")), now: now)
     }
 
+    /// Binary frames are traffic too; a long transfer must not look idle to the heartbeat.
+    public func noteBinary(now: Date = Date()) {
+        heartbeat.noteActivity(now: now)
+    }
+
     /// Routes one inbound control frame through the protocol rules and the state machine.
     @discardableResult
     public func handle(envelope: Envelope, now: Date = Date()) -> [SessionAction] {

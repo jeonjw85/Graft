@@ -71,6 +71,13 @@ class ConnectionService : Service() {
         super.onCreate()
         instance = this
         createChannel()
+        // The service can outlive the Activity, and a sticky restart has no UI at all, so it needs
+        // its own handle on the file. Attaching twice is safe: the repository merges.
+        scope.launch {
+            ConnectionRepository.attachHistoryStore(
+                TransferHistoryStore(File(filesDir, "transfer-history.json"))
+            )
+        }
         networkMonitor = NetworkMonitor(this) { wake.trySend(Unit) }.also { it.start() }
         startForeground(NOTIFICATION_ID, buildNotification("Starting…"))
     }
@@ -79,6 +86,9 @@ class ConnectionService : Service() {
 
         when (intent?.action) {
             ACTION_SEND_FILE -> {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putBoolean("userStopped", false)
+                    .apply()
                 val uri = intent.getParcelableExtra(EXTRA_URI, android.net.Uri::class.java)
                 startConnection()
                 if (uri != null) scope.launch { sendPickedFile(uri) }
@@ -144,7 +154,11 @@ class ConnectionService : Service() {
         }
 
         val offered = runCatching {
-            sessionCoordinator.offer(target, TransferIds.next(sessionCoordinator.progress.keys))
+            // Ids restart at 1 in every session, so include the saved rows when picking the next
+                // one. Otherwise a new transfer collides with yesterday's and replaces its row.
+                val usedIds = sessionCoordinator.progress.keys +
+                    ConnectionRepository.state.value.history.map { it.id }
+                sessionCoordinator.offer(target, TransferIds.next(usedIds))
         }
         if (offered.isFailure) {
             ConnectionRepository.onOutgoingFileResult(false, "Could not start the transfer")
@@ -275,6 +289,8 @@ class ConnectionService : Service() {
         val sessionCoordinator = TransferCoordinator(
             directory = directory,
             isPaired = { true },
+            // Without this the resume lookups always miss and an interrupted transfer restarts.
+            records = kr.jjw.graft.files.TransferRecordStore(File(filesDir, "transfers.json")),
             sendControl = { envelope -> sessionClient.send(envelope) },
             sendBinary = { bytes -> sessionClient.sendBinary(bytes) },
             receiversFactory = FallbackFileReceivingFactory.of(
@@ -309,6 +325,7 @@ class ConnectionService : Service() {
         var outcome = Outcome.RETRY
         var closed = false
 
+        try {
         sessionClient.connect().collect { event ->
             ConnectionRepository.onEvent(event)
 
@@ -322,6 +339,10 @@ class ConnectionService : Service() {
                         }
                     }
                     when (event.envelope.type) {
+                        "ping" -> sessionClient.send(
+                            Envelope.create("pong", re = event.envelope.id)
+                        )
+
                         "pair.ok" -> sessionClient.send(
                             Envelope.create(
                                 "hello",
@@ -332,6 +353,7 @@ class ConnectionService : Service() {
                         "hello.ok" -> {
                             retryAttempt = 0
                             completeManualPairing(prefixTrust, offer)
+                            completePinnedPairing(offer)
                             // Alerts that arrive while connected must go out immediately.
                             ConnectionRepository.onPendingNotification = {
                                 flushPendingNotifications(sessionClient)
@@ -352,7 +374,7 @@ class ConnectionService : Service() {
                     // for pair.request, the app for pair.ok.
                     sessionClient.send(
                         ClientHandshake.initial(
-                            paired = isPaired(this@ConnectionService),
+                            paired = hasCompletedPairing(this@ConnectionService),
                             token = offer.token,
                             deviceId = deviceId(),
                             name = android.os.Build.MODEL,
@@ -378,12 +400,16 @@ class ConnectionService : Service() {
                 else -> Unit
             }
         }
+        } finally {
+            // Cancellation skips the normal path; without this, receivers stay pending and
+            // filesDir/received keeps its .part files.
+            ConnectionRepository.onPendingNotification = null
+            sessionCoordinator.cancelAll()
+            sessionClient.close()
+            client = null
+            coordinator = null
+        }
 
-        ConnectionRepository.onPendingNotification = null
-        sessionCoordinator.cancelAll()
-        sessionClient.close()
-        client = null
-        coordinator = null
         // A flow that ends without a close event still means the socket is gone.
         if (!closed) outcome = Outcome.RETRY
         return outcome
@@ -415,6 +441,7 @@ class ConnectionService : Service() {
     private fun stopConnection() {
         connectJob?.cancel()
         connectJob = null
+        coordinator?.cancelAll()
         client?.close()
         client = null
         coordinator = null
@@ -448,6 +475,7 @@ class ConnectionService : Service() {
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                     .putString("fingerprint", decision.fingerprint)
                     .remove("prefix")
+                    .putBoolean(KEY_PAIRING_COMPLETE, true)
                     .apply()
                 ConnectionRepository.onPeerPaired(offer.name)
             }
@@ -460,6 +488,32 @@ class ConnectionService : Service() {
             is ManualPairingDecision.Result.InvalidPrefix,
             -> Unit
         }
+    }
+
+    /**
+     * Finishes a QR pairing: the fingerprint was already known from the code, and the Mac has now
+     * accepted it. Only here does the phone start treating itself as paired.
+     */
+    private fun completePinnedPairing(offer: PairingOffer) {
+        if (hasCompletedPairing(this)) return
+        if (offer.fingerprint.isEmpty()) return
+
+        val store = PeerStore(File(filesDir, "peers.json"))
+        if (store.load().none { it.fingerprint == offer.fingerprint }) {
+            store.add(
+                kr.jjw.graft.data.PairedPeer(
+                    fingerprint = offer.fingerprint,
+                    name = offer.name,
+                    platform = "macos",
+                    pairedAtMillis = System.currentTimeMillis(),
+                )
+            )
+        }
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putBoolean(KEY_PAIRING_COMPLETE, true)
+            .remove("token")
+            .apply()
+        ConnectionRepository.onPeerPaired(offer.name)
     }
 
     private fun loadManualPrefix(): String? =
@@ -536,6 +590,7 @@ class ConnectionService : Service() {
         const val ACTION_SEND_FILE = "kr.jjw.graft.action.SEND_FILE"
         const val EXTRA_URI = "uri"
         private const val CHANNEL_ID = "graft-connection"
+        private const val KEY_PAIRING_COMPLETE = "pairingComplete"
         const val NOTIFICATION_ID = 1
 
         @Volatile
@@ -565,6 +620,58 @@ class ConnectionService : Service() {
                 .getString("fingerprint", null)
                 ?.isNotEmpty() == true
 
+        /**
+         * True only once the Mac has accepted the pairing.
+         *
+         * A fingerprint saved by a QR scan means "this is the Mac we are about to pair with", not
+         * "we are paired". Sending `hello` on the strength of the scan made the Mac refuse the very
+         * first connection, so the handshake decision reads this flag instead.
+         */
+        fun hasCompletedPairing(context: Context): Boolean {
+            val prefs = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+            // Once the key exists, a false value means "pairing has not finished" and must stay
+            // false: the QR and code paths both clear it before dialing.
+            val completed =
+                if (prefs.contains(KEY_PAIRING_COMPLETE)) prefs.getBoolean(KEY_PAIRING_COMPLETE, false)
+                else null
+            val pinned = prefs.getString("fingerprint", null)
+            // Only read the peer file when the flag is missing (a build that predates it).
+            val known = if (completed == null && !pinned.isNullOrEmpty()) {
+                runCatching {
+                    PeerStore(File(context.filesDir, "peers.json")).load()
+                        .map { it.fingerprint }
+                        .toSet()
+                }.getOrDefault(emptySet())
+            } else {
+                emptySet()
+            }
+            val result = PairingState.hasCompletedPairing(completed, pinned, known)
+            if (result && completed == null) {
+                prefs.edit().putBoolean(KEY_PAIRING_COMPLETE, true).apply()
+            }
+            return result
+        }
+
+        /** Stores a typed-code offer and drops the old pin, so the next handshake asks to pair. */
+        fun saveManualPairing(
+            context: Context,
+            host: String,
+            port: Int,
+            prefix: String,
+            token: String,
+        ) {
+            context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString("host", host)
+                .putInt("port", port)
+                .putString("prefix", prefix)
+                .putString("token", token)
+                .remove("fingerprint")
+                .putBoolean(KEY_PAIRING_COMPLETE, false)
+                .apply()
+            File(context.filesDir, "peers.json").delete()
+        }
+
         /** Drops the pairing and stops the service, so the app returns to onboarding. */
         fun forget(context: Context) {
             context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
@@ -574,6 +681,7 @@ class ConnectionService : Service() {
                 .remove("fingerprint")
                 .remove("prefix")
                 .remove("token")
+                .putBoolean(KEY_PAIRING_COMPLETE, false)
                 .apply()
             File(context.filesDir, "peers.json").delete()
             ConnectionRepository.forgetHistory()
@@ -590,6 +698,7 @@ class ConnectionService : Service() {
                 .putString("token", offer.token)
                 .putString("name", offer.name)
                 .remove("prefix")
+                .putBoolean(KEY_PAIRING_COMPLETE, false)
                 .apply()
         }
 

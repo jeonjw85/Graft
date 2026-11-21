@@ -25,13 +25,16 @@ public enum TransferFailure: Error, Equatable {
     case unsafeName
     case wrongOffset
     case hashMismatch
+    case diskFull
 }
 
 /// Runs file transfers for one connection: answers offers, writes incoming data, and streams
 /// outgoing files.
 ///
 /// Auto-accept applies only when `isPaired` returns true, which is the spec's rule.
-public final class TransferCoordinator {
+/// @unchecked Sendable: protocol state stays on the main queue; the only background work is
+/// the windowed send, which touches `sendWindow`/`sendLock` and nothing shared besides that.
+public final class TransferCoordinator: @unchecked Sendable {
     public enum Mode {
         case receiveOnly
         case sendOnly
@@ -43,7 +46,19 @@ public final class TransferCoordinator {
     private let mode: Mode
     private let sendControl: (Envelope) -> Void
     private let sendBinary: (Data) -> Void
+    private let sendBinaryAsync: ((Data, @escaping () -> Void) -> Void)?
     private let records: TransferRecordStore?
+
+    /// How many 64 KiB frames may be in the socket queue at once (1 MiB).
+    private static let sendWindowSize = 16
+    private let sendWindow = DispatchSemaphore(value: sendWindowSize)
+    private let sendQueue = DispatchQueue(label: "kr.jjw.graft.send", qos: .utility)
+    private let sendLock = NSLock()
+    private var sendCancelled = false
+    private var activeSends: Set<UInt32> = []
+
+    /// Called on the main queue when send progress moves, so the UI can refresh.
+    public var onProgress: ((UInt32) -> Void)?
 
     private var receivers: [UInt32: FileReceiver] = [:]
     private var senders: [UInt32: FileSender] = [:]
@@ -60,6 +75,7 @@ public final class TransferCoordinator {
         isPaired: @escaping () -> Bool,
         sendControl: @escaping (Envelope) -> Void,
         sendBinary: @escaping (Data) -> Void,
+        sendBinaryAsync: ((Data, @escaping () -> Void) -> Void)? = nil,
         records: TransferRecordStore? = nil
     ) {
         self.directory = directory
@@ -67,6 +83,7 @@ public final class TransferCoordinator {
         self.isPaired = isPaired
         self.sendControl = sendControl
         self.sendBinary = sendBinary
+        self.sendBinaryAsync = sendBinaryAsync
         self.records = records
         records?.purgeExpired()
     }
@@ -124,9 +141,16 @@ public final class TransferCoordinator {
                 direction: .receive
             )
         } catch {
-            failures[frame.transferId] = .wrongOffset
+            let full = (error as NSError).code == NSFileWriteOutOfSpaceError
+            failures[frame.transferId] = full ? .diskFull : .wrongOffset
+            try? receiver.cancel()
             receivers.removeValue(forKey: frame.transferId)
-            sendControl(errorEnvelope(code: "bad_payload", message: "chunk at the wrong offset"))
+            sendControl(
+                errorEnvelope(
+                    code: full ? "disk_full" : "bad_payload",
+                    message: full ? "not enough space" : "chunk at the wrong offset"
+                )
+            )
         }
     }
 
@@ -140,9 +164,9 @@ public final class TransferCoordinator {
         }
 
         guard let payload = envelope.payload.objectValue,
-              let tid = payload["tid"]?.numberValue.map(UInt32.init),
+              let tid = payload["tid"]?.uint32Value,
               let name = payload["name"]?.stringValue,
-              let size = payload["size"]?.numberValue.map(UInt64.init) else {
+              let size = payload["size"]?.uint64Value else {
             sendControl(errorEnvelope(code: "bad_payload", message: "file.offer fields missing"))
             return
         }
@@ -188,9 +212,16 @@ public final class TransferCoordinator {
 
     private func handleAccept(_ envelope: Envelope) {
         guard let payload = envelope.payload.objectValue,
-              let tid = payload["tid"]?.numberValue.map(UInt32.init),
-              let offset = payload["offset"]?.numberValue.map(UInt64.init),
+              let tid = payload["tid"]?.uint32Value,
+              let offset = payload["offset"]?.uint64Value,
               let sender = senders[tid] else {
+            return
+        }
+
+        // The windowed path keeps a large file off the main thread and out of memory. Tests and the
+        // headless harness pass no async sender and take the synchronous path below.
+        if sendBinaryAsync != nil {
+            startWindowedSend(tid: tid, offset: offset, sender: sender)
             return
         }
 
@@ -215,6 +246,118 @@ public final class TransferCoordinator {
         }
     }
 
+    private func startWindowedSend(tid: UInt32, offset: UInt64, sender: FileSender) {
+        sendLock.lock()
+        if activeSends.contains(tid) {
+            sendLock.unlock()
+            return
+        }
+        activeSends.insert(tid)
+        sendCancelled = false
+        sendLock.unlock()
+
+        sendQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                var published: UInt64 = offset
+                try sender.forEachChunk(transferId: tid, from: offset) { frame in
+                    try self.awaitWindow()
+                    let data = frame.encoded()
+                    self.sendBinaryAsync?(data) { self.sendWindow.signal() }
+                    let confirmed = frame.offset + UInt64(frame.data.count)
+                    if confirmed - published >= 512 * 1024 || confirmed == sender.size {
+                        published = confirmed
+                        DispatchQueue.main.async {
+                            self.progress[tid] = TransferProgress(
+                                name: sender.name,
+                                confirmed: confirmed,
+                                total: sender.size,
+                                direction: .send
+                            )
+                            self.onProgress?(tid)
+                        }
+                    }
+                }
+                self.drainWindow()
+                let digest = try sender.sha256()
+                DispatchQueue.main.async {
+                    self.finishSend(tid: tid, sender: sender, digest: digest)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.failSend(tid: tid)
+                }
+            }
+        }
+    }
+
+    private func finishSend(tid: UInt32, sender: FileSender, digest: String) {
+        progress[tid] = TransferProgress(
+            name: sender.name,
+            confirmed: sender.size,
+            total: sender.size,
+            direction: .send
+        )
+        completed.insert(tid)
+        senders.removeValue(forKey: tid)
+        sendControl(
+            controlEnvelope(type: "file.complete", payload: [
+                "tid": .number(Double(tid)),
+                "sha256": .string(digest)
+            ])
+        )
+        sendLock.lock()
+        activeSends.remove(tid)
+        sendLock.unlock()
+        onProgress?(tid)
+    }
+
+    private func failSend(tid: UInt32) {
+        failures[tid] = .wrongOffset
+        senders.removeValue(forKey: tid)
+        sendLock.lock()
+        activeSends.remove(tid)
+        sendLock.unlock()
+        sendControl(errorEnvelope(code: "bad_payload", message: "could not read the file"))
+        onProgress?(tid)
+    }
+
+    /// Waits for room in the socket queue, but gives up if the connection went away.
+    private func awaitWindow() throws {
+        while sendWindow.wait(timeout: .now() + 0.5) == .timedOut {
+            sendLock.lock()
+            let stopped = sendCancelled
+            sendLock.unlock()
+            if stopped {
+                throw TransportFailure.cancelled
+            }
+        }
+    }
+
+    /// Waits until every queued frame has been processed, so `file.complete` cannot overtake data.
+    private func drainWindow() {
+        var taken = 0
+        while taken < Self.sendWindowSize {
+            guard sendWindow.wait(timeout: .now() + 15) == .success else { break }
+            taken += 1
+        }
+        for _ in 0..<taken {
+            sendWindow.signal()
+        }
+    }
+
+    /// Stops every send when the connection dies; the background loop exits on the next frame.
+    public func cancelAll() {
+        sendLock.lock()
+        sendCancelled = true
+        activeSends.removeAll()
+        sendLock.unlock()
+    }
+
+    private enum TransportFailure: Error {
+        case cancelled
+    }
+
     private func handleReject(_ envelope: Envelope) {
         guard let tid = tid(from: envelope) else { return }
         failures[tid] = .unpairedPeer
@@ -223,7 +366,7 @@ public final class TransferCoordinator {
 
     private func handleComplete(_ envelope: Envelope) {
         guard let payload = envelope.payload.objectValue,
-              let tid = payload["tid"]?.numberValue.map(UInt32.init),
+              let tid = payload["tid"]?.uint32Value,
               let expected = payload["sha256"]?.stringValue,
               let receiver = receivers[tid] else {
             return
@@ -262,7 +405,7 @@ public final class TransferCoordinator {
     // MARK: - Helpers
 
     private func tid(from envelope: Envelope) -> UInt32? {
-        envelope.payload.objectValue?["tid"]?.numberValue.map(UInt32.init)
+        envelope.payload.objectValue?["tid"]?.uint32Value
     }
 
     private func recordProgress(_ transferId: UInt32, _ receiver: FileReceiver) {
@@ -299,10 +442,3 @@ public final class TransferCoordinator {
     }
 }
 
-extension JSONValue {
-    /// Numeric payload fields arrive as JSON numbers; ranges are validated by the caller.
-    public var numberValue: Double? {
-        if case .number(let value) = self { return value }
-        return nil
-    }
-}

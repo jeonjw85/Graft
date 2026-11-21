@@ -298,4 +298,57 @@ final class TransferCoordinatorTests: XCTestCase {
             XCTAssertEqual($0 as? TransferFailure, .duplicateTransfer)
         }
     }
+
+    func testWindowedSendStreamsEveryChunkWithoutBufferingTheFile() throws {
+        let data = Data((0..<(200 * 1024)).map { UInt8($0 % 251) })
+        let file = sourceDirectory.appendingPathComponent("big.bin")
+        try data.write(to: file)
+
+        let completed = expectation(description: "file.complete")
+        let counter = ChunkCounter()
+        let coordinator = TransferCoordinator(
+            directory: directory,
+            isPaired: { true },
+            sendControl: { envelope in
+                if envelope.type == "file.complete" { completed.fulfill() }
+            },
+            sendBinary: { _ in XCTFail("the windowed path must be used") },
+            sendBinaryAsync: { payload, done in
+                counter.add(payload.count)
+                done()
+            }
+        )
+
+        try coordinator.offer(url: file, transferId: 9)
+        coordinator.onControl(
+            Envelope(type: "file.accept", payload: .object([
+                "tid": .number(9),
+                "offset": .number(0)
+            ]))
+        )
+
+        wait(for: [completed], timeout: 10)
+        // The closure receives encoded frames, so the count includes the per-frame header.
+        XCTAssertGreaterThanOrEqual(counter.total, data.count)
+        XCTAssertEqual(coordinator.completed, [9])
+        XCTAssertEqual(coordinator.progress[9]?.confirmed, UInt64(data.count))
+    }
+
+    private final class ChunkCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var bytes = 0
+
+        func add(_ count: Int) {
+            lock.lock()
+            bytes += count
+            lock.unlock()
+        }
+
+        var total: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return bytes
+        }
+    }
+
 }

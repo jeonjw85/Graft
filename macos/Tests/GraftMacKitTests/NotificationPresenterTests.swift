@@ -32,6 +32,24 @@ final class NotificationPresenterTests: XCTestCase {
         XCTAssertEqual(presenter.recent.first?.app, "Messenger")
     }
 
+    func testMalformedTimestampIsIgnored() {
+        let center = FakeCenter()
+        let presenter = NotificationPresenter(port: center)
+
+        for value in [-1.0, 1.5, 1e30] {
+            let frame = Envelope(type: "notification.posted", payload: .object([
+                "pkg": .string("com.example"),
+                "app": .string("App"),
+                "title": .string("Title"),
+                "text": .string("Text"),
+                "ts": .number(value),
+            ]))
+            XCTAssertTrue(presenter.present(frame))
+        }
+
+        XCTAssertEqual(presenter.recent.map(\.postedAt), [0, 0, 0])
+    }
+
     func testTwoKiBLimitIsApplied() {
         let center = FakeCenter()
         let presenter = NotificationPresenter(port: center)

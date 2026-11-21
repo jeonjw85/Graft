@@ -131,6 +131,9 @@ class GraftClient(
     fun sendBinary(bytes: ByteArray): Boolean =
         webSocket?.send(okio.ByteString.of(*bytes)) ?: false
 
+    /** Bytes queued but not yet written; the sender waits while this is large. */
+    fun pendingBytes(): Long = webSocket?.queueSize() ?: 0L
+
     fun send(envelope: Envelope): Boolean {
         val text = MessageCodec.encode(envelope).toString(Charsets.UTF_8)
         return webSocket?.send(text) ?: false

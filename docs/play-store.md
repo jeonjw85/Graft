@@ -10,10 +10,12 @@ Keep that file and its password backed up: losing it means losing the ability to
       app signing key.
 - [x] Upload `dist/Graft-0.1.2.aab` (versionCode 3, versionName 0.1.2). v0.1.1 lacked an app icon in
       the bundle, which Play rejects; v0.1.2 adds adaptive and legacy launcher icons.
+- [ ] Upload `dist/Graft-0.1.4.aab` (versionCode 5, versionName 0.1.4).
 - [x] Store listing assets in `release/store/`:
       - `icon-512.png` — 512×512, 32-bit PNG, no transparency
       - `feature-1024x500.png` — 1024×500, no transparency, content inside the safe area
-      - `01-files.png`, `02-connection.png`, `03-alerts.png` — 1080×2400 captures of the real app
+      - `01-files.png`, `02-connection.png`, `03-alerts.png`, `04-settings.png` — 1080×2400 captures
+        of the real app
       - `icon-1024.png` — unused master for the app bundle
 - [ ] Store listing text: title (`Graft — Mac & Android Link`), short and full description
 - [x] Privacy policy URL: https://jjw.kr/policy/graft (published 2026-11-17). The Korean page is
@@ -114,6 +116,13 @@ Graft 테스트에 초대합니다. Mac과 안드로이드 폰 사이에서 파�
 
 ## Release steps
 
-1. `scripts/release.sh 0.1.0`
-2. Upload the AAB in the Play Console, fill the declarations above, and roll out to internal testing.
-3. Publish the GitHub release with the DMG, APK, AAB, and `SHA256SUMS`.
+1. Bump `versionCode`/`versionName` in `android/app/build.gradle.kts` and
+   `CFBundleVersion`/`CFBundleShortVersionString` in `macos/project.yml`, and write
+   `docs/release-notes/<version>.md`.
+2. `scripts/release.sh <version>` — it refuses to run if the three version strings disagree, and
+   checks the built APK and app report the requested version.
+3. Upload the AAB in the Play Console, fill the declarations above, and roll out to the testing
+   track.
+4. Publish the GitHub release with the DMG, APK, AAB, and `SHA256SUMS`, using the notes file (Play
+   and GitHub both read it).
+5. Add the Korean and English release notes to the Play track ("What's new").

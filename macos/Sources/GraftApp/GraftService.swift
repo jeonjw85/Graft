@@ -27,8 +27,15 @@ final class GraftService: ObservableObject {
     private var lastTransferSucceeded = false
     @Published private(set) var transferFailure: String?
     @Published private(set) var receiveDirectory: URL = GraftService.defaultReceiveDirectory()
-    @Published var autoCopyClipboard = true
-    @Published private(set) var notificationPreviews = true
+    @Published var autoCopyClipboard = true {
+        didSet { defaults.set(autoCopyClipboard, forKey: Self.autoCopyKey) }
+    }
+    @Published private(set) var notificationPreviews = true {
+        didSet { defaults.set(notificationPreviews, forKey: Self.previewsKey) }
+    }
+
+    private static let autoCopyKey = "graft.autoCopyClipboard"
+    private static let previewsKey = "graft.notificationPreviews"
     @Published private(set) var notificationsAllowed: Bool?
     /// Address the phone is expected at, shown in the popover.
     @Published private(set) var peerAddress: String?
@@ -36,6 +43,7 @@ final class GraftService: ObservableObject {
     @Published private(set) var recentNotifications: [NotificationPresenter.Recent] = []
 
     private let port: UInt16
+    private let defaults: UserDefaults
     private let store: PeerStore
     private let clock: () -> Date
     private let identity: DeviceIdentity?
@@ -144,10 +152,12 @@ final class GraftService: ObservableObject {
         port: UInt16 = 47800,
         storeURL: URL? = nil,
         clock: @escaping () -> Date = Date.init,
-        identityTag: String = "kr.jjw.graft.mac"
+        identityTag: String = "kr.jjw.graft.mac",
+        defaults: UserDefaults = .standard
     ) {
         self.port = port
         self.clock = clock
+        self.defaults = defaults
         self.store = PeerStore(url: storeURL ?? Self.defaultStoreURL())
 
         do {
@@ -165,6 +175,12 @@ final class GraftService: ObservableObject {
         }
 
         self.peers = store.load()
+
+        // Read the saved choices on every launch; a privacy toggle that resets itself is a bug.
+        let previews = defaults.object(forKey: Self.previewsKey) as? Bool ?? false
+        self.notificationPreviews = previews
+        self.notifications.showPreviews = previews
+        self.autoCopyClipboard = defaults.object(forKey: Self.autoCopyKey) as? Bool ?? true
     }
 
     deinit {
@@ -212,6 +228,9 @@ final class GraftService: ObservableObject {
         server.onConnection = { [weak self] connection in
             Task { @MainActor in self?.attach(connection: connection) }
         }
+        server.onDisconnect = { [weak self] key in
+            Task { @MainActor in self?.handleDisconnect(key: key) }
+        }
 
         do {
             try server.start()
@@ -244,7 +263,28 @@ final class GraftService: ObservableObject {
             fingerprint: fingerprint,
             deviceName: Host.current().localizedName ?? "Graft Mac"
         )
-        try? discoverable.start()
+        discoverable.onFailure = { [weak self] error in
+            Task { @MainActor in
+                self?.lastError = error
+                // A failed registration means the phone cannot find this Mac after a network
+                // change. Saying so beats pretending the link is idle.
+                if self?.sessions.isEmpty == true {
+                    self?.menuState = MenuState(
+                        status: .failed(message: "Could not advertise on this network"),
+                        peerName: nil
+                    )
+                }
+            }
+        }
+        do {
+            try discoverable.start()
+        } catch {
+            lastError = error
+            menuState = MenuState(
+                status: .failed(message: "Could not advertise on this network"),
+                peerName: nil
+            )
+        }
         advertiser = discoverable
     }
 
@@ -266,6 +306,8 @@ final class GraftService: ObservableObject {
             session.tick(now: clock())
         }
         sessions.removeAll()
+        coordinators.removeAll()
+        connection = nil
         advertiser?.stop()
         advertiser = nil
         server?.stop()
@@ -434,7 +476,11 @@ final class GraftService: ObservableObject {
 
         let key = ObjectIdentifier(connection)
         sessions[key] = session
-        self.connection = connection
+        // An unpaired peer is attached (that is what pairing is) but must not become "the"
+        // connection until the handshake says it is trusted.
+        if pairingService.isPaired(fingerprint) {
+            self.connection = connection
+        }
 
         let coordinator = TransferCoordinator(
             directory: receiveDirectory,
@@ -444,14 +490,28 @@ final class GraftService: ObservableObject {
             },
             sendControl: { [weak connection] envelope in try? connection?.send(envelope) },
             sendBinary: { [weak connection] data in try? connection?.sendBinary(data) },
+            sendBinaryAsync: { [weak connection] data, done in
+                try? connection?.sendBinary(data, completion: done)
+            },
             records: TransferRecordStore(file: Self.defaultRecordStoreURL())
         )
+        coordinator.onProgress = { [weak self] _ in self?.syncTransfers() }
         coordinators.insert(coordinator, for: key)
 
         connection.receive { [weak self] envelope in
             Task { @MainActor in
                 guard let self, let session = self.sessions[key] else { return }
                 session.handle(envelope: envelope, now: self.clock())
+
+                // While a pairing window is open any certificate may complete TLS. Only a peer
+                // the pairing rules actually accepted may touch the clipboard, post a banner, or
+                // start a transfer.
+                guard self.pairingService?.isPaired(fingerprint) == true else {
+                    self.publishState(for: session)
+                    return
+                }
+
+                self.connection = connection
                 self.coordinators.coordinator(for: key)?.onControl(envelope)
                 self.handleClipboard(envelope)
                 if self.notifications.present(envelope) {
@@ -466,6 +526,7 @@ final class GraftService: ObservableObject {
         connection.receiveBinary { [weak self] data in
             Task { @MainActor in
                 guard let self else { return }
+                self.sessions[key]?.noteBinary(now: self.clock())
                 self.coordinators.coordinator(for: key)?.onBinary(data)
                 self.syncTransfers()
             }
@@ -477,6 +538,23 @@ final class GraftService: ObservableObject {
             timer.setEventHandler { [weak self] in self?.tickSessions() }
             timer.resume()
             heartbeatTimer = timer
+        }
+    }
+
+    /// Drops everything tied to a closed socket.
+    ///
+    /// Without this the popover kept saying "Connected" until the 60 s heartbeat expired, and the
+    /// session and coordinator stayed in memory for the life of the process.
+    private func handleDisconnect(key: ObjectIdentifier) {
+        sessions.removeValue(forKey: key)
+        coordinators.coordinator(for: key)?.cancelAll()
+        coordinators.remove(key)
+        if let current = connection, ObjectIdentifier(current) == key {
+            connection = nil
+        }
+        if sessions.isEmpty, case .connected = menuState.status {
+            menuState = MenuState(status: .searching, peerName: nil)
+            peerAddress = nil
         }
     }
 
@@ -622,6 +700,7 @@ final class GraftService: ObservableObject {
         case .unsafeName: return "The file name is not safe to save"
         case .wrongOffset: return "The transfer got out of sync"
         case .hashMismatch: return "The file did not arrive intact"
+        case .diskFull: return "There is not enough space for this file"
         }
     }
 

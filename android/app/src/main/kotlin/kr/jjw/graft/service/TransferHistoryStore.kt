@@ -23,7 +23,10 @@ private data class StoredRecord(
  * The received files are the durable record, but the list is what tells a user where a file went and
  * whether it arrived intact. A corrupt or unreadable file loads as empty instead of failing the app.
  */
-class TransferHistoryStore(private val file: File, private val capacity: Int = 20) {
+class TransferHistoryStore(
+    private val file: File,
+    private val capacity: Int = TRANSFER_HISTORY_LIMIT,
+) {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun load(): List<TransferRecord> {

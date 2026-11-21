@@ -128,7 +128,7 @@ fun ConnectScreen(
                 RowDivider()
                 SettingsRow(
                     label = "Settings",
-                    supporting = "Background, clipboard, alerts, about",
+                    supporting = "Background, clipboard, notifications, about",
                     onClick = onOpenSettings,
                 )
                 RowDivider()

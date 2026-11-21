@@ -5,7 +5,7 @@ import Network
 ///
 /// The service instance name carries only eight characters of the fingerprint for uniqueness; the
 /// TXT record carries the full value so a phone can verify it before connecting.
-public final class BonjourAdvertiser {
+public final class BonjourAdvertiser: @unchecked Sendable {
     public enum Error: Swift.Error {
         case unsupportedName
     }
@@ -14,6 +14,9 @@ public final class BonjourAdvertiser {
     private let fingerprint: String
     private let deviceName: String
     private var listener: NWListener?
+
+    /// Called when the registration itself fails (usually the port is already bound).
+    public var onFailure: ((Swift.Error?) -> Void)?
 
     public init(port: UInt16, fingerprint: String, deviceName: String) {
         self.port = port
@@ -32,6 +35,11 @@ public final class BonjourAdvertiser {
             type: BonjourServiceInfo.serviceType,
             txtRecord: Self.txtRecord(fingerprint: fingerprint)
         )
+        listener.stateUpdateHandler = { [weak self] state in
+            if case .failed(let error) = state {
+                self?.onFailure?(error)
+            }
+        }
         listener.start(queue: .main)
         self.listener = listener
     }

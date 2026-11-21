@@ -166,7 +166,7 @@ public final class FileReceiver {
             throw FileReceiverError.wrongOffset(expected: written, got: frame.offset)
         }
 
-        handle.write(frame.data)
+        try handle.write(contentsOf: frame.data)
         hasher.update(data: frame.data)
         written += UInt64(frame.data.count)
         _ = partURL
@@ -199,8 +199,18 @@ public final class FileReceiver {
         } else {
             try fileManager.moveItem(at: partURL, to: finalURL)
         }
+        Self.markQuarantined(finalURL)
         isFinished = true
         return finalURL
+    }
+
+    /// A file that arrived over the network must pass Gatekeeper, or a pushed `.pkg` or `.command`
+    /// would open without the "downloaded" warning.
+    private static func markQuarantined(_ url: URL) {
+        let value = "0081;00000000;Graft;"
+        value.withCString { pointer in
+            _ = setxattr(url.path, "com.apple.quarantine", pointer, strlen(pointer), 0, 0)
+        }
     }
 
     /// Recomputes the digest from the partial file. Used when a transfer is resumed across launches.

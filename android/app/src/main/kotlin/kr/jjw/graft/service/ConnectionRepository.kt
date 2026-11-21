@@ -42,13 +42,18 @@ object ConnectionRepository {
     private val transferHistory = TransferHistory()
     private var historyStore: TransferHistoryStore? = null
 
-    /** Called once by the service so the recent list survives restarts. */
+    /**
+     * Points the repository at the saved history and folds it into what is already in memory.
+     *
+     * Both the service and the UI call this, and the UI may do so again after the Activity is
+     * recreated. Merging makes a repeat call harmless instead of dropping rows recorded since the
+     * first call, and keeping the newest row per id stops the saved copy from duplicating them.
+     */
     fun attachHistoryStore(store: TransferHistoryStore) {
         historyStore = store
         val restored = store.load()
-        if (restored.isNotEmpty()) {
-            _state.update { it.copy(history = restored) }
-        }
+        if (restored.isEmpty()) return
+        _state.update { it.copy(history = mergeHistory(it.history, restored)) }
     }
 
     /**
@@ -60,7 +65,7 @@ object ConnectionRepository {
     fun reset() {
         pairedName = null
         transferHistory.clear()
-        _state.value = ConnectionUiState()
+        _state.update { it.withoutSession() }
     }
 
     /** Deletes the saved history as well, for "Forget this Mac". */
@@ -125,8 +130,7 @@ object ConnectionRepository {
             destination = destination,
         )
         // Merge with what was restored from disk so a restart does not drop older rows.
-        val merged = (listOf(row) + _state.value.history.filterNot { it.id == row.id && it.name == row.name })
-            .take(50)
+        val merged = mergeHistory(listOf(row), _state.value.history)
         _state.update { it.copy(history = merged) }
         historyStore?.save(merged)
     }
@@ -176,8 +180,37 @@ object ConnectionRepository {
 
     fun onStopped() {
         pairedName = null
-        _state.value = ConnectionUiState()
+        _state.update { it.withoutSession() }
     }
+
+    /**
+     * Drops what belongs to a live link but keeps the parts that outlive it.
+     *
+     * Transfer history and the local alert log are about this device, not this session, so a
+     * disconnect must not make the Files tab look empty.
+     */
+    private fun ConnectionUiState.withoutSession() = copy(
+        status = ConnectionStatus.Idle,
+        peerName = null,
+        transfers = emptyMap(),
+        lastError = null,
+        lastClipboard = null,
+        lastSentClipboard = null,
+        lastClipboardAt = 0L,
+        outgoingError = null,
+    )
+
+    /**
+     * Newest first, one row per transfer, capped at what the store keeps.
+     *
+     * The key includes the name and direction because transfer ids are only unique inside one
+     * session: the Mac restarts its counter at 1 on every launch.
+     */
+    private fun mergeHistory(vararg lists: List<TransferRecord>): List<TransferRecord> =
+        lists.flatMap { it }
+            .sortedByDescending { it.finishedAtMillis }
+            .distinctBy { Triple(it.id, it.name, it.direction) }
+            .take(TRANSFER_HISTORY_LIMIT)
 
     private fun onMessage(envelope: Envelope) {
         when (envelope.type) {

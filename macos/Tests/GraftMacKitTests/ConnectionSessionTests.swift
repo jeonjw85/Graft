@@ -84,6 +84,22 @@ final class ConnectionSessionTests: XCTestCase {
         XCTAssertFalse(closed)
     }
 
+    func testBinaryFramesCountAsLiveness() throws {
+        var closed = false
+        let session = try makeSession(paired: [phone], close: { closed = true })
+        session.peerFingerprint = phone
+        session.start(now: now)
+        _ = session.handle(envelope: Envelope(type: "hello", payload: .object([:])), now: now)
+
+        // A transfer longer than 60 s only sends binary frames; it must not look idle.
+        for offset in stride(from: 20.0, through: 100.0, by: 20.0) {
+            session.noteBinary(now: now.addingTimeInterval(offset))
+            session.tick(now: now.addingTimeInterval(offset))
+        }
+
+        XCTAssertFalse(closed)
+    }
+
     func testPingIsSentEveryTwentySeconds() throws {
         var sent: [String] = []
         let session = try makeSession(paired: [phone], send: { sent.append($0.type) })

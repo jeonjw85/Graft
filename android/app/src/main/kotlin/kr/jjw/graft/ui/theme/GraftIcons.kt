@@ -7,9 +7,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
 /**
- * The three tab icons, drawn from Material path data.
+ * The tab icons and the status icons, drawn from Material path data.
  *
- * Declared here instead of pulling in `material-icons-extended`: three icons are not worth an
+ * Declared here instead of pulling in `material-icons-extended`: a handful of icons is not worth an
  * artifact, and `Icon` tints them, so the fill colour only needs to exist.
  */
 object GraftIcons {

@@ -30,7 +30,7 @@ class TransferLocationsTest {
         directory = java.io.File("/tmp/graft-test-unused"),
         isPaired = { true },
         sendControl = { },
-        sendBinary = { },
+        sendBinary = { true },
         receiversFactory = FileReceivingFactory { receiving },
     )
 

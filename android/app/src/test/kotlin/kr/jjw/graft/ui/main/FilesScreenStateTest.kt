@@ -68,6 +68,28 @@ class FilesScreenStateTest {
     }
 
     @Test
+    fun `an old row with the same id does not hide a new transfer`() {
+        // Mac transfer ids restart at 1 with every session.
+        val state = FilesScreenRules.from(
+            transfers = mapOf(1u to progress(1u, "today.pdf")),
+            history = listOf(record(1u, name = "yesterday.jpg")),
+        )
+
+        assertEquals(1, state.active.size)
+        assertEquals("today.pdf", state.active.single().progress.name)
+    }
+
+    @Test
+    fun `a finished transfer of the same file leaves the list`() {
+        val state = FilesScreenRules.from(
+            transfers = mapOf(1u to progress(1u, "photo.jpg")),
+            history = listOf(record(1u, name = "photo.jpg")),
+        )
+
+        assertEquals(0, state.active.size)
+    }
+
+    @Test
     fun `percent never exceeds one hundred`() {
         val over = progress(1u).copy(confirmed = 40, total = 10)
 

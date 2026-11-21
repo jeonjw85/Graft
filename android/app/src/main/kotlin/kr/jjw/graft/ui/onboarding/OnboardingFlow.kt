@@ -1,5 +1,10 @@
 package kr.jjw.graft.ui.onboarding
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
 import kr.jjw.graft.notifications.NotificationAccess
 import kr.jjw.graft.ui.OnboardingStep
@@ -147,13 +153,23 @@ private fun WelcomeStep() {
     )
 }
 
+private fun canPostNotifications(context: android.content.Context): Boolean =
+    Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+        PackageManager.PERMISSION_GRANTED
+
 @Composable
 private fun PermissionsStep(context: android.content.Context) {
     var granted by remember { mutableStateOf(NotificationAccess.isGranted(context)) }
+    var canPost by remember { mutableStateOf(canPostNotifications(context)) }
+    val askPostNotifications = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { canPost = canPostNotifications(context) }
 
     // The user leaves for system settings; refresh the answer when they come back.
     LifecycleResumeEffect(Unit) {
         granted = NotificationAccess.isGranted(context)
+        canPost = canPostNotifications(context)
         onPauseOrDispose { }
     }
 
@@ -172,6 +188,21 @@ private fun PermissionsStep(context: android.content.Context) {
     if (!granted) {
         Button(onClick = { NotificationAccess.openSettings(context) }) {
             Text("Open notification access")
+        }
+    }
+
+    // Android 13+ hides the ongoing "connected" notice without this, which makes the background
+    // link invisible. Ask here, where the user is already granting permissions.
+    if (!canPost) {
+        Spacer(Modifier.height(GraftSpacing.s))
+        Text("Background notice", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Allow notifications so the ongoing connection notice can be shown.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = GraftPalette.onSurfaceVariant,
+        )
+        Button(onClick = { askPostNotifications.launch(Manifest.permission.POST_NOTIFICATIONS) }) {
+            Text("Allow notifications")
         }
     }
 }

@@ -140,7 +140,7 @@ public final class PairingService: @unchecked Sendable {
         }
     }
 
-    func isPaired(_ fingerprint: String) -> Bool {
+    public func isPaired(_ fingerprint: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         return pairedFingerprints.contains(fingerprint)

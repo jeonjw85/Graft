@@ -12,19 +12,26 @@ Graft runs on a Mac and an Android phone on the same Wi-Fi network. Nothing leav
 
 ## macOS
 
-1. Download `Graft-<version>.dmg` from the release page.
+1. Download `Graft-<version>.dmg` from
+   [the releases page](https://github.com/jeonjw85/Graft/releases), and check it against
+   `SHA256SUMS` (`shasum -a 256 -c SHA256SUMS`).
 2. Open the image and drag **Graft** into **Applications**.
-3. The build is **not notarized** (no Apple Developer ID). On first launch macOS refuses it:
-   - Right-click **Graft** in Applications and choose **Open**, then **Open** again, or
-   - `xattr -dr com.apple.quarantine /Applications/Graft.app`
+3. The build is **not notarized** (no Apple Developer ID), so macOS blocks the first launch.
+   - **macOS 15 and later:** double-click Graft, choose **Done** in the dialog, then open
+     **System Settings → Privacy & Security**, scroll down, click **Open Anyway**, authenticate,
+     and confirm **Open**. Right-click → Open no longer overrides this.
+   - **macOS 13–14:** right-click **Graft** in Applications and choose **Open**, then **Open** again.
+   - Terminal alternative: `xattr -dr com.apple.quarantine /Applications/Graft.app`
 4. Graft has no Dock icon; it appears in the menu bar. Allow **Local Network** access when asked,
    otherwise pairing and reconnecting cannot work.
 5. Allow notifications if you want phone alerts to appear on the Mac.
 
 ## Android
 
-1. Download `Graft-<version>.apk` from the release page (or install from Google Play once the
-   listing is published).
+1. Download `Graft-<version>.apk` from
+   [the releases page](https://github.com/jeonjw85/Graft/releases), or install from Google Play.
+   The two channels are signed with different keys: switching between them requires uninstalling
+   first, which also clears the pairing.
 2. Allow installing unknown apps for the browser or file manager you downloaded with.
 3. Open Graft and follow onboarding: notification access is optional, camera access enables QR
    scanning but typed values work without it.
@@ -41,5 +48,7 @@ Graft runs on a Mac and an Android phone on the same Wi-Fi network. Nothing leav
 
 ## Uninstall
 
-- macOS: quit from the popover, then move the app to the Trash.
 - Android: uninstall the app. Received files stay in `Download/Graft`.
+- macOS: quit from the popover and move the app to the Trash, then delete
+  `~/Library/Application Support/Graft` and the **Graft** item in Keychain Access. The app has no
+  uninstaller, and moving it to the Trash leaves the peer pin and the device identity behind.

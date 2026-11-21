@@ -17,8 +17,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kr.jjw.graft.ui.theme.GraftIcons
 import kr.jjw.graft.ui.theme.GraftPalette
@@ -44,7 +42,7 @@ fun StatusCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(GraftSpacing.m),
         ) {
-            ToneBadge(tone = tone, description = title)
+            ToneBadge(tone = tone)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(GraftSpacing.xs),
@@ -65,15 +63,19 @@ fun StatusCard(
     }
 }
 
-/** A tinted circle behind the status icon: colour carries the tone, the icon repeats it. */
+/**
+ * A tinted circle behind the status icon.
+ *
+ * Decorative: the title next to it already says the same thing, and announcing both would make a
+ * screen reader repeat itself.
+ */
 @Composable
-private fun ToneBadge(tone: StatusTone, description: String) {
+private fun ToneBadge(tone: StatusTone) {
     val color = GraftPalette.colorFor(tone)
     Box(
         modifier = Modifier
             .size(40.dp)
-            .background(color.copy(alpha = 0.16f), CircleShape)
-            .semantics { contentDescription = description },
+            .background(color.copy(alpha = 0.16f), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Icon(

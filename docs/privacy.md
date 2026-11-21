@@ -24,10 +24,14 @@ reports, identifiers, or advertising data.
 
 - The paired device's fingerprint and name.
 - The app's own key pair (Android Keystore, or the macOS Keychain).
-- Recent transfer and notification entries, in memory, until the app quits.
+- The last 50 transfers: file name, size, direction, destination, and failure reason. Stored in the
+  app's private storage so the Files tab survives a restart; **Forget this Mac** deletes them.
+- Recent forwarded notifications, in memory until the app quits.
 - Your notification allow list (Android only).
 
-Uninstalling the app removes this data. Files you received stay where you saved them.
+Uninstalling the Android app removes this data. On macOS, moving the app to the Trash does not:
+delete `~/Library/Application Support/Graft` and the **Graft** keychain item as well. Files you
+received stay where you saved them.
 
 ## Permissions
 

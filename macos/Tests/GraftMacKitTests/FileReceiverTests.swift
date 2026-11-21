@@ -124,6 +124,14 @@ final class FileReceiverTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), data)
         let remaining = try FileManager.default.contentsOfDirectory(atPath: directory.path)
         XCTAssertEqual(remaining, ["sample.bin"], "no .part file must remain")
+        XCTAssertTrue(isQuarantined(url), "a downloaded file must pass through Gatekeeper")
+    }
+
+    private func isQuarantined(_ url: URL) -> Bool {
+        url.withUnsafeFileSystemRepresentation { path -> Bool in
+            guard let path else { return false }
+            return getxattr(path, "com.apple.quarantine", nil, 0, 0, 0) > 0
+        }
     }
 
     func testResumeAppendsFromTheAcceptedOffset() throws {

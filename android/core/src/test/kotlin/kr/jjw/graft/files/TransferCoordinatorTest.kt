@@ -29,7 +29,7 @@ class TransferCoordinatorTest {
         directory = directory.toFile(),
         isPaired = { paired },
         sendControl = { sentControl.add(it) },
-        sendBinary = { sentBinary.add(it) },
+        sendBinary = { bytes -> sentBinary.add(bytes); true },
         records = records,
     )
 
@@ -304,6 +304,36 @@ class TransferCoordinatorTest {
         assertEquals("file.complete", sentControl.last().type)
         val hash = sentControl.last().payload.jsonObject["sha256"]?.jsonPrimitive?.content
         assertEquals(sha256(data), hash)
+    }
+
+    @Test
+    fun `a rejected frame stops the send and records a failure`() {
+        val file = File(directory.toFile(), "outgoing.bin")
+        file.writeBytes(payload(100 * 1024))
+
+        var accepted = true
+        val coordinator = TransferCoordinator(
+            directory = directory.toFile(),
+            isPaired = { true },
+            sendControl = { sentControl.add(it) },
+            sendBinary = { accepted = false; false },
+            backlog = { 0 },
+            records = null,
+        )
+        coordinator.offer(file, 6u)
+        coordinator.onControl(
+            Envelope.create(
+                "file.accept",
+                buildJsonObject {
+                    put("tid", JsonPrimitive(6L))
+                    put("offset", JsonPrimitive(0L))
+                }
+            )
+        )
+
+        assertEquals(TransferFailureKind.READ_FAILED, coordinator.failures[6u])
+        assertFalse(accepted, "the loop must stop at the first refused frame")
+        assertEquals(0, sentControl.count { it.type == "file.complete" })
     }
 
     @Test

@@ -36,4 +36,19 @@ class AlertsScreenStateTest {
     fun `an empty list stays empty`() {
         assertEquals(0, AlertsScreenRules.from(accessGranted = true, recent = emptyList()).recent.size)
     }
+
+    @Test
+    fun `chosen rows use launcher labels and keep apps that are not installed`() {
+        val installed = listOf("com.example.b" to "Bravo", "com.example.a" to "Alpha")
+
+        val rows = AlertsScreenRules.chosenRows(
+            allowed = setOf("com.example.b", "com.example.a", "com.gone.app"),
+            installed = installed,
+        )
+
+        assertEquals(
+            listOf("Alpha", "Bravo", "com.gone.app"),
+            rows.map { it.second },
+        )
+    }
 }

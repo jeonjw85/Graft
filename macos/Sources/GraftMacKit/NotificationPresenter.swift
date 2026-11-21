@@ -69,7 +69,7 @@ public final class NotificationPresenter {
         }
 
         let title = payload["title"]?.stringValue ?? ""
-        let postedAt = payload["ts"]?.numberValue.map(UInt64.init) ?? 0
+        let postedAt = payload["ts"]?.uint64Value ?? 0
         let body = Self.truncate(text, maxBytes: Self.maxBodyBytes)
 
         port.add(title: app, body: showPreviews ? body : "New notification")

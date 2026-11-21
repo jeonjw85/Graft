@@ -1,9 +1,15 @@
 package kr.jjw.graft.ui.main
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -11,11 +17,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -30,7 +40,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import kotlinx.coroutines.Dispatchers
@@ -45,10 +58,10 @@ import kr.jjw.graft.ui.components.RowDivider
 import kr.jjw.graft.ui.components.SectionHeader
 import kr.jjw.graft.ui.components.SettingsGroup
 import kr.jjw.graft.ui.components.SettingsRow
+import kr.jjw.graft.ui.service.installedApps
 import kr.jjw.graft.ui.theme.GraftIcons
 import kr.jjw.graft.ui.theme.GraftPalette
 import kr.jjw.graft.ui.theme.GraftSpacing
-import kr.jjw.graft.ui.service.installedApps
 
 data class AlertsScreenState(
     val accessGranted: Boolean,
@@ -60,6 +73,19 @@ object AlertsScreenRules {
 
     fun from(accessGranted: Boolean, recent: List<PostedNotification>): AlertsScreenState =
         AlertsScreenState(accessGranted = accessGranted, recent = recent.take(MAX_RECENT))
+
+    /**
+     * The rows the "Forward these apps" card draws, in the user's chosen order.
+     *
+     * The allow list is the source of truth, not the launcher list: an app that was uninstalled or
+     * lost its launch icon must still be shown so it can be switched off.
+     */
+    fun chosenRows(allowed: Set<String>, installed: List<Pair<String, String>>): List<Pair<String, String>> {
+        val labels = installed.toMap()
+        return allowed
+            .map { pkg -> pkg to (labels[pkg] ?: pkg) }
+            .sortedBy { it.second.lowercase() }
+    }
 }
 
 @Composable
@@ -69,17 +95,29 @@ fun AlertsScreen(modifier: Modifier = Modifier) {
     var installed by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var allowed by remember { mutableStateOf<Set<String>>(emptySet()) }
     var accessGranted by remember { mutableStateOf(NotificationAccess.isGranted(context)) }
-    val scope = rememberCoroutineScope()
     var picking by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
-        NotificationAllowList.refresh(context)
-        allowed = NotificationAllowList.load(context)
-        installed = installedApps(context)
+    fun updateAllowed(pkg: String, checked: Boolean) {
+        scope.launch {
+            if (checked) {
+                NotificationAllowList.add(context, pkg)
+            } else {
+                NotificationAllowList.remove(context, pkg)
+            }
+            allowed = NotificationAllowList.load(context)
+        }
     }
 
+    // Also runs on the way back from the system permission screen, so newly installed apps appear
+    // in the picker without restarting the app.
     LifecycleResumeEffect(Unit) {
         accessGranted = NotificationAccess.isGranted(context)
+        scope.launch {
+            NotificationAllowList.refresh(context)
+            allowed = NotificationAllowList.load(context)
+            installed = withContext(Dispatchers.IO) { installedApps(context) }
+        }
         onPauseOrDispose { }
     }
 
@@ -89,16 +127,7 @@ fun AlertsScreen(modifier: Modifier = Modifier) {
         AppPickerDialog(
             installed = installed,
             allowed = allowed,
-            onToggle = { pkg, checked ->
-                scope.launch {
-                    if (checked) {
-                        NotificationAllowList.add(context, pkg)
-                    } else {
-                        NotificationAllowList.remove(context, pkg)
-                    }
-                    allowed = NotificationAllowList.load(context)
-                }
-            },
+            onToggle = ::updateAllowed,
             onDismiss = { picking = false },
         )
     }
@@ -108,8 +137,8 @@ fun AlertsScreen(modifier: Modifier = Modifier) {
             .fillMaxSize()
             .padding(horizontal = GraftSpacing.l),
         verticalArrangement = Arrangement.spacedBy(GraftSpacing.s),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            top = GraftSpacing.l,
+        contentPadding = PaddingValues(
+            top = GraftSpacing.xl,
             bottom = GraftSpacing.xl,
         ),
     ) {
@@ -125,43 +154,24 @@ fun AlertsScreen(modifier: Modifier = Modifier) {
 
         if (state.accessGranted) {
             item { SectionHeader("Forward these apps") }
-            val chosen = installed.filter { allowed.contains(it.first) }
+            val chosen = AlertsScreenRules.chosenRows(allowed, installed)
             item {
                 SettingsGroup {
-                    if (chosen.isEmpty()) {
-                        SettingsRow(
-                            label = "Add apps",
-                            supporting = "Choose which apps may forward alerts",
-                            onClick = { picking = true },
-                            showChevron = false,
-                        )
-                    } else {
-                        chosen.forEachIndexed { index, (pkg, label) ->
-                            if (index > 0) RowDivider()
-                            AppToggleRow(
-                                packageName = pkg,
-                                label = label,
-                                checked = true,
-                                onCheckedChange = { checked ->
-                                    scope.launch {
-                                        if (checked) {
-                                            NotificationAllowList.add(context, pkg)
-                                        } else {
-                                            NotificationAllowList.remove(context, pkg)
-                                        }
-                                        allowed = NotificationAllowList.load(context)
-                                    }
-                                },
-                            )
-                        }
-                        RowDivider()
-                        SettingsRow(
-                            label = "Add apps",
-                            supporting = "Choose which apps may forward alerts",
-                            onClick = { picking = true },
-                            showChevron = false,
+                    chosen.forEachIndexed { index, (pkg, label) ->
+                        if (index > 0) RowDivider()
+                        AppToggleRow(
+                            packageName = pkg,
+                            label = label,
+                            checked = true,
+                            onCheckedChange = { checked -> updateAllowed(pkg, checked) },
                         )
                     }
+                    if (chosen.isNotEmpty()) RowDivider()
+                    SettingsRow(
+                        label = "Add apps",
+                        supporting = "Choose which apps may forward alerts",
+                        onClick = { picking = true },
+                    )
                 }
             }
         }
@@ -196,30 +206,39 @@ private fun AppPickerDialog(
         else installed.filter { it.second.contains(query, ignoreCase = true) }
     }
 
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismiss) {
         Surface(color = GraftPalette.surface, shape = RoundedCornerShape(16.dp)) {
-            Column(modifier = Modifier.fillMaxWidth().heightIn(max = 620.dp).padding(GraftSpacing.l)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 620.dp)
+                    .padding(GraftSpacing.l),
+            ) {
                 Text("Forward these apps", style = MaterialTheme.typography.titleLarge)
-                androidx.compose.foundation.layout.Spacer(Modifier.size(GraftSpacing.s))
-                androidx.compose.material3.OutlinedTextField(
+                Spacer(Modifier.size(GraftSpacing.s))
+                OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
                     label = { Text("Search") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                androidx.compose.foundation.layout.Spacer(Modifier.size(GraftSpacing.s))
-                LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
-                    items(visible, key = { it.first }) { (pkg, label) ->
-                        AppToggleRow(
-                            packageName = pkg,
-                            label = label,
-                            checked = allowed.contains(pkg),
-                            onCheckedChange = { onToggle(pkg, it) },
-                        )
+                Spacer(Modifier.size(GraftSpacing.s))
+                if (visible.isEmpty()) {
+                    EmptyState(if (installed.isEmpty()) "Loading apps…" else "No apps match that search.")
+                } else {
+                    LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                        items(visible, key = { it.first }) { (pkg, label) ->
+                            AppToggleRow(
+                                packageName = pkg,
+                                label = label,
+                                checked = allowed.contains(pkg),
+                                onCheckedChange = { onToggle(pkg, it) },
+                            )
+                        }
                     }
                 }
-                androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Done") }
+                TextButton(onClick = onDismiss) { Text("Done") }
             }
         }
     }
@@ -239,7 +258,7 @@ private fun AccessCard(granted: Boolean, onOpenSettings: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(GraftSpacing.m),
         ) {
-            androidx.compose.material3.Icon(
+            Icon(
                 imageVector = GraftIcons.Alerts,
                 contentDescription = null,
                 tint = if (granted) GraftPalette.connected else GraftPalette.warning,
@@ -252,7 +271,7 @@ private fun AccessCard(granted: Boolean, onOpenSettings: () -> Unit) {
                 )
                 Text(
                     if (granted) {
-                        "Tick the apps whose alerts should reach your Mac."
+                        "Choose which apps to forward."
                     } else {
                         "Tap to allow, then choose apps here."
                     },
@@ -275,6 +294,8 @@ private fun AppToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .heightIn(min = 52.dp)
             .padding(horizontal = GraftSpacing.l, vertical = GraftSpacing.s),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(GraftSpacing.m),
@@ -285,7 +306,7 @@ private fun AppToggleRow(
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
@@ -311,14 +332,17 @@ private fun RecentAlertRow(notification: PostedNotification) {
     }
 }
 
-/** The app's own launcher icon, loaded off the main thread. */
+/** The app's own launcher icon, loaded off the main thread at the density it will be drawn at. */
 @Composable
 private fun AppIcon(packageName: String, size: Int = 28) {
     val context = LocalContext.current
-    val icon by produceState<ImageBitmap?>(initialValue = null, packageName) {
+    val pixels = with(LocalDensity.current) { (size.dp).roundToPx() }
+    val icon by produceState<ImageBitmap?>(initialValue = null, packageName, pixels) {
         value = withContext(Dispatchers.IO) {
             runCatching {
-                context.packageManager.getApplicationIcon(packageName).toBitmap(size, size).asImageBitmap()
+                context.packageManager.getApplicationIcon(packageName)
+                    .toBitmap(pixels, pixels)
+                    .asImageBitmap()
             }.getOrNull()
         }
     }

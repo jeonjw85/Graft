@@ -28,3 +28,25 @@ final class JSONValueTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(JSONValue.self, from: data), value)
     }
 }
+
+
+final class JSONValueNumberTests: XCTestCase {
+    func testWholeNumbersInsideTheRangeConvert() {
+        XCTAssertEqual(JSONValue.number(0).uint64Value, 0)
+        XCTAssertEqual(JSONValue.number(4_294_967_295).uint32Value, UInt32.max)
+        XCTAssertNil(JSONValue.number(4_294_967_296).uint32Value)
+    }
+
+    func testNegativeFractionalAndHugeNumbersAreRejected() {
+        XCTAssertNil(JSONValue.number(-1).uint64Value)
+        XCTAssertNil(JSONValue.number(1.5).uint64Value)
+        XCTAssertNil(JSONValue.number(1e30).uint64Value)
+        XCTAssertNil(JSONValue.number(.infinity).uint64Value)
+        XCTAssertNil(JSONValue.number(.nan).uint64Value)
+    }
+
+    func testNonNumbersAreRejected() {
+        XCTAssertNil(JSONValue.string("12").uint64Value)
+        XCTAssertNil(JSONValue.null.uint64Value)
+    }
+}

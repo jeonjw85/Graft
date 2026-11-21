@@ -2,7 +2,7 @@ import Foundation
 import GraftProtocol
 
 /// One finished transfer, as the settings window shows it.
-public struct MacTransferRecord: Equatable, Sendable {
+public struct MacTransferRecord: Hashable, Sendable {
     /// The protocol transfer id, so a retry can replace its earlier row.
     public let id: UInt32?
     public let name: String
@@ -69,6 +69,7 @@ public final class TransferHistory {
         case .unsafeName: return "Name not allowed"
         case .wrongOffset: return "Interrupted"
         case .hashMismatch: return "Hash mismatch"
+        case .diskFull: return "Disk full"
         }
     }
 

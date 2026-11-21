@@ -78,16 +78,13 @@ fun ManualPairingForm(
                     is ManualPairingRules.Result.Invalid -> message = result.message
                     is ManualPairingRules.Result.Valid -> {
                         message = null
-                        val prefs = context.getSharedPreferences(
-                            ConnectionService.PREFS,
-                            android.content.Context.MODE_PRIVATE,
+                        ConnectionService.saveManualPairing(
+                            context = context,
+                            host = result.pairing.host,
+                            port = result.pairing.port,
+                            prefix = result.pairing.prefix,
+                            token = result.pairing.code,
                         )
-                        prefs.edit()
-                            .putString("host", result.pairing.host)
-                            .putInt("port", result.pairing.port)
-                            .putString("prefix", result.pairing.prefix)
-                            .putString("token", result.pairing.code)
-                            .apply()
                         onPaired()
                     }
                 }

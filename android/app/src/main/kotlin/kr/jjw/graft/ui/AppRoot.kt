@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kr.jjw.graft.service.ConnectionRepository
 import kr.jjw.graft.service.ConnectionService
 import kr.jjw.graft.service.ConnectionStatus
@@ -28,11 +30,10 @@ fun AppRoot() {
 
     // The transfer list is useful even while disconnected, so it loads with the app, not the service.
     LaunchedEffect(Unit) {
-        ConnectionRepository.attachHistoryStore(
-            java.io.File(context.filesDir, "transfer-history.json").let {
-                kr.jjw.graft.service.TransferHistoryStore(it)
-            }
+        val store = kr.jjw.graft.service.TransferHistoryStore(
+            java.io.File(context.filesDir, "transfer-history.json")
         )
+        withContext(Dispatchers.IO) { ConnectionRepository.attachHistoryStore(store) }
     }
 
     LaunchedEffect(connection.status) {

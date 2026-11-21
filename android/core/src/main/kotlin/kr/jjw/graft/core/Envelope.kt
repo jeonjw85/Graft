@@ -22,6 +22,7 @@ data class Envelope(
             payload: JsonElement = JsonObject(emptyMap()),
             id: String = UUID.randomUUID().toString(),
             ts: Long = System.currentTimeMillis(),
-        ): Envelope = Envelope(id = id, type = type, ts = ts, payload = payload)
+            re: String? = null,
+        ): Envelope = Envelope(id = id, re = re, type = type, ts = ts, payload = payload)
     }
 }

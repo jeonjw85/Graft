@@ -89,9 +89,22 @@ class TransferHistoryTest {
     @Test
     fun `a retried transfer replaces the earlier row`() {
         record(id = 7u, name = "first.txt", error = TransferFailureKind.WRONG_OFFSET)
-        record(id = 7u, name = "second.txt")
+        record(id = 7u, name = "first.txt")
 
         assertEquals(1, history.list.size, "the same transfer must not appear twice")
-        assertEquals("second.txt", history.list.first().name)
+        assertEquals(TransferOutcome.Completed, history.list.first().outcome)
+    }
+
+    @Test
+    fun `a reused id for another file keeps both rows`() {
+        // Mac transfer ids restart at 1 on every launch, so a later session reuses the number.
+        record(id = 1u, name = "yesterday.jpg")
+        record(id = 1u, name = "today.pdf")
+
+        assertEquals(2, history.list.size)
+        assertEquals(
+            listOf("today.pdf", "yesterday.jpg"),
+            history.list.map { it.name },
+        )
     }
 }

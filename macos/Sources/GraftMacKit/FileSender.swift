@@ -12,7 +12,9 @@ public enum FileSenderError: Error, Equatable {
 ///
 /// The digest covers the whole file, including bytes sent before a resume, so the receiver can
 /// verify the assembled result.
-public final class FileSender {
+/// @unchecked Sendable: created on one side and handed to the send queue, which reads the file
+/// sequentially and never shares the handle.
+public final class FileSender: @unchecked Sendable {
     public let url: URL
     public let size: UInt64
     public let name: String
@@ -53,6 +55,29 @@ public final class FileSender {
             position += UInt64(chunk.count)
         }
         return frames
+    }
+
+    /// Reads the file one chunk at a time and hands it to `body`, so nothing is buffered.
+    ///
+    /// Unlike ``frames(transferId:from:)`` this never builds an array of the whole file.
+    public func forEachChunk(
+        transferId: UInt32,
+        from offset: UInt64,
+        _ body: (BinaryFrame) throws -> Void
+    ) throws {
+        guard offset <= size else { throw FileSenderError.offsetBeyondEnd }
+
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        try handle.seek(toOffset: offset)
+
+        var position = offset
+        while true {
+            let chunk = try handle.read(upToCount: chunkSize) ?? Data()
+            if chunk.isEmpty { break }
+            try body(try BinaryFrame(transferId: transferId, offset: position, data: chunk))
+            position += UInt64(chunk.count)
+        }
     }
 
     /// Streams frames one at a time so a large file is never held in memory.

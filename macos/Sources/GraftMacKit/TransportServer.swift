@@ -18,6 +18,8 @@ public final class TransportServer: @unchecked Sendable {
     public private(set) var port: UInt16?
 
     public var onConnection: ((TransportConnection) -> Void)?
+    /// Fired when an accepted connection closes, so the service can drop its session immediately.
+    public var onDisconnect: ((ObjectIdentifier) -> Void)?
 
     public init(identity: DeviceIdentity, authorizer: PeerAuthorizer, port: UInt16 = 47800) {
         self.identity = identity
@@ -74,6 +76,7 @@ public final class TransportServer: @unchecked Sendable {
             let transport = TransportConnection(connection: connection, queue: self.queue)
             transport.onClose = { [weak self] key in
                 self?.connections.removeValue(forKey: key)
+                self?.onDisconnect?(key)
             }
             // Fire only after the TLS handshake and fingerprint check succeed; newConnectionHandler
             // runs before authentication, so reporting there would announce rejected peers.
@@ -137,6 +140,13 @@ public final class TransportConnection: @unchecked Sendable {
     private var isReady = false
     private var handlers: [(Envelope) -> Void] = []
     private var binaryHandlers: [(Data) -> Void] = []
+    private let sendLock = NSLock()
+    private let handlerLock = NSLock()
+    private var pendingEnvelopes: [Envelope] = []
+    private var pendingBinary: [Data] = []
+    private static let maxPendingFrames = 32
+    private var pendingSends = 0
+    private var closeWhenDrained = false
 
     var onClose: ((ObjectIdentifier) -> Void)?
     var onReady: (() -> Void)?
@@ -176,11 +186,15 @@ public final class TransportConnection: @unchecked Sendable {
         guard isReady else { throw TransportError.notReady }
         let metadata = NWProtocolWebSocket.Metadata(opcode: .binary)
         let context = NWConnection.ContentContext(identifier: "binary", metadata: [metadata])
+        beganSend()
         connection.send(
             content: data,
             contentContext: context,
             isComplete: true,
-            completion: .contentProcessed { _ in completion?() }
+            completion: .contentProcessed { _ in
+                completion?()
+                self.endedSend()
+            }
         )
     }
 
@@ -193,28 +207,71 @@ public final class TransportConnection: @unchecked Sendable {
         let data = try MessageCodec.encode(envelope)
         let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
         let context = NWConnection.ContentContext(identifier: "text", metadata: [metadata])
+        beganSend()
         connection.send(
             content: data,
             contentContext: context,
             isComplete: true,
-            completion: .contentProcessed { _ in completion?() }
+            completion: .contentProcessed { _ in
+                completion?()
+                self.endedSend()
+            }
         )
     }
 
     public func receive(_ handler: @escaping (Envelope) -> Void) {
+        handlerLock.lock()
         handlers.append(handler)
+        let buffered = pendingEnvelopes
+        pendingEnvelopes.removeAll()
+        handlerLock.unlock()
+        // A peer can answer before the service has finished registering (registration hops through
+        // the main actor). Replaying what arrived early is what keeps the first hello from vanishing.
+        for envelope in buffered { handler(envelope) }
     }
 
     /// Registers a handler for binary frames (file data).
     public func receiveBinary(_ handler: @escaping (Data) -> Void) {
+        handlerLock.lock()
         binaryHandlers.append(handler)
+        let buffered = pendingBinary
+        pendingBinary.removeAll()
+        handlerLock.unlock()
+        for data in buffered { handler(data) }
     }
 
     /// The authenticated peer's SPKI fingerprint, recorded during the TLS handshake.
     public internal(set) var peerFingerprint: String?
 
+    /// Closes once everything already queued has been handed to the network stack.
+    ///
+    /// An error reply sent immediately before a cancel is dropped, so the peer only sees a bare
+    /// close and cannot tell "you must pair" from "the network died".
     public func close() {
-        connection.cancel()
+        sendLock.lock()
+        if pendingSends == 0 {
+            sendLock.unlock()
+            connection.cancel()
+            return
+        }
+        closeWhenDrained = true
+        sendLock.unlock()
+    }
+
+    private func beganSend() {
+        sendLock.lock()
+        pendingSends += 1
+        sendLock.unlock()
+    }
+
+    private func endedSend() {
+        sendLock.lock()
+        pendingSends -= 1
+        let closeNow = closeWhenDrained && pendingSends == 0
+        sendLock.unlock()
+        if closeNow {
+            connection.cancel()
+        }
     }
 
     /// Reads the authenticated peer's SPKI fingerprint from this connection's TLS metadata.
@@ -248,6 +305,26 @@ public final class TransportConnection: @unchecked Sendable {
         return try? SpkiFingerprint.base64URL(publicKeyPoint: keyData)
     }
 
+    private func deliver(_ envelope: Envelope) {
+        handlerLock.lock()
+        let targets = handlers
+        if targets.isEmpty, pendingEnvelopes.count < Self.maxPendingFrames {
+            pendingEnvelopes.append(envelope)
+        }
+        handlerLock.unlock()
+        for handler in targets { handler(envelope) }
+    }
+
+    private func deliverBinary(_ data: Data) {
+        handlerLock.lock()
+        let targets = binaryHandlers
+        if targets.isEmpty, pendingBinary.count < Self.maxPendingFrames {
+            pendingBinary.append(data)
+        }
+        handlerLock.unlock()
+        for handler in targets { handler(data) }
+    }
+
     private func readLoop() {
         connection.receiveMessage { [weak self] data, context, _, error in
             guard let self else { return }
@@ -255,9 +332,9 @@ public final class TransportConnection: @unchecked Sendable {
                 let metadata = context?.protocolMetadata(definition: NWProtocolWebSocket.definition)
                     as? NWProtocolWebSocket.Metadata
                 if metadata?.opcode == .binary {
-                    for handler in self.binaryHandlers { handler(data) }
+                    self.deliverBinary(data)
                 } else if let envelope = try? MessageCodec.decode(data) {
-                    for handler in self.handlers { handler(envelope) }
+                    self.deliver(envelope)
                 }
             }
             if error != nil { return }

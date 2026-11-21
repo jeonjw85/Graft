@@ -15,5 +15,13 @@ jobs:
       - uses: actions/checkout@v7
       - name: Show Swift version
         run: swift --version
-      - name: Run protocol tests
+      - name: Run protocol and kit tests
         run: swift test --package-path macos
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Run the app tests
+        run: |
+          xcodegen generate --spec macos/project.yml
+          xcodebuild test -project macos/Graft.xcodeproj -scheme Graft \
+            -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO \
+            -only-testing:GraftAppTests

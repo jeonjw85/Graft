@@ -48,15 +48,15 @@ class TransferHistoryStoreTest {
     }
 
     @Test
-    fun `only the newest twenty are kept`() {
+    fun `only the newest rows the limit allows are kept`() {
         // TransferHistory keeps newest first, so the list handed to the store is already ordered.
-        val many = (30 downTo 1).map { record(id = it.toUInt(), name = "f$it") }
+        val many = (60 downTo 1).map { record(id = it.toUInt(), name = "f$it") }
 
         store.save(many)
 
         val reloaded = store.load()
-        assertEquals(20, reloaded.size)
-        assertEquals("f30", reloaded.first().name)
+        assertEquals(TRANSFER_HISTORY_LIMIT, reloaded.size)
+        assertEquals("f60", reloaded.first().name)
     }
 
     @Test

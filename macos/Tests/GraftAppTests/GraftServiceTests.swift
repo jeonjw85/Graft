@@ -20,6 +20,48 @@ final class GraftServiceTests: XCTestCase {
         }
     }
 
+    func testPrivacyTogglesSurviveARestart() {
+        let suite = "graft.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let tag = temporaryIdentityTag()
+        defer { DeviceIdentity.delete(tag: tag) }
+
+        let first = GraftService(
+            storeURL: temporaryStoreURL(),
+            identityTag: tag,
+            defaults: defaults
+        )
+        first.updateNotificationPreview(enabled: false)
+        first.autoCopyClipboard = false
+
+        let second = GraftService(
+            storeURL: temporaryStoreURL(),
+            identityTag: tag,
+            defaults: defaults
+        )
+
+        XCTAssertFalse(second.notificationPreviews)
+        XCTAssertFalse(second.autoCopyClipboard)
+    }
+
+    func testNotificationPreviewsAreHiddenUntilTurnedOn() {
+        let suite = "graft.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let tag = temporaryIdentityTag()
+        defer { DeviceIdentity.delete(tag: tag) }
+
+        let service = GraftService(
+            storeURL: temporaryStoreURL(),
+            identityTag: tag,
+            defaults: defaults
+        )
+
+        XCTAssertFalse(service.notificationPreviews)
+        XCTAssertTrue(service.autoCopyClipboard)
+    }
+
     func testRestartRecoversAfterThePortIsFreed() throws {
         let port = try occupyFreePort()
         let tag = temporaryIdentityTag()

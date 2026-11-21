@@ -19,12 +19,29 @@ export ANDROID_HOME
 
 mkdir -p "$DIST"
 
+# The version lives in three files that have drifted before. Refuse to build unless the caller's
+# argument matches them, and check the artifacts again below.
+GRADLE_VERSION="$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' "$ROOT/android/app/build.gradle.kts" | head -1)"
+PLIST_VERSION="$(sed -n 's/.*CFBundleShortVersionString: "\(.*\)".*/\1/p' "$ROOT/macos/project.yml" | head -1)"
+if [[ "$GRADLE_VERSION" != "$VERSION" || "$PLIST_VERSION" != "$VERSION" ]]; then
+  echo "error: asked for $VERSION but gradle says '$GRADLE_VERSION' and project.yml says '$PLIST_VERSION'" >&2
+  echo "       bump both, then run again" >&2
+  exit 1
+fi
+
 echo "==> Android"
 (cd "$ROOT/android" && ./gradlew :app:assembleRelease :app:bundleRelease)
 
 BUILD_TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
 "$BUILD_TOOLS/apksigner" verify --print-certs \
   "$ROOT/android/app/build/outputs/apk/release/app-release.apk" | head -3
+
+APK_BADGING="$("$BUILD_TOOLS/aapt2" dump badging \
+    "$ROOT/android/app/build/outputs/apk/release/app-release.apk")"
+if ! grep -q "versionName='$VERSION'" <<<"$APK_BADGING"; then
+  echo "error: the built APK does not report $VERSION" >&2
+  exit 1
+fi
 
 cp "$ROOT/android/app/build/outputs/apk/release/app-release.apk" "$DIST/Graft-$VERSION.apk"
 cp "$ROOT/android/app/build/outputs/bundle/release/app-release.aab" "$DIST/Graft-$VERSION.aab"
@@ -35,6 +52,11 @@ xcodebuild build -project "$ROOT/macos/Graft.xcodeproj" -scheme Graft -configura
   -derivedDataPath "$DIST/derived" CODE_SIGNING_ALLOWED=NO >/dev/null
 
 APP="$DIST/derived/Build/Products/Release/Graft.app"
+APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+if [[ "$APP_VERSION" != "$VERSION" ]]; then
+  echo "error: the built app reports $APP_VERSION, not $VERSION" >&2
+  exit 1
+fi
 # No Developer ID exists, so the app is ad-hoc signed and the DMG is not notarized.
 codesign --force --deep --sign - "$APP"
 

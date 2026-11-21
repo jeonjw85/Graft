@@ -26,7 +26,17 @@ struct SettingsWindowView: View {
 struct NotificationsSettingsPage: View {
     @ObservedObject var service: GraftService
 
-    private var allowed: Bool { service.notificationsAllowed != false }
+    /// Nil means the system has not been asked yet. That is a call to action, not a green tick.
+    private var access: (symbol: String, tint: Color, needsAction: Bool) {
+        switch service.notificationsAllowed {
+        case .some(true):
+            return ("checkmark.circle.fill", Palette.connected, false)
+        case .some(false):
+            return ("exclamationmark.triangle.fill", Palette.warning, true)
+        case .none:
+            return ("minus.circle", Palette.onSurfaceVariant, true)
+        }
+    }
 
     var body: some View {
         Form {
@@ -41,14 +51,14 @@ struct NotificationsSettingsPage: View {
 
                 LabeledContent("Access") {
                     HStack(spacing: 6) {
-                        Image(systemName: allowed ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(allowed ? Palette.connected : Palette.warning)
+                        Image(systemName: access.symbol)
+                            .foregroundStyle(access.tint)
                         Text(service.notificationStatus)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                if !allowed {
+                if access.needsAction {
                     Button("Open Notification Settings") { service.openNotificationSettings() }
                 }
             } footer: {
@@ -97,10 +107,7 @@ struct ClipboardSettingsPage: View {
             Section {
                 Toggle("Copy received clipboard automatically", isOn: $service.autoCopyClipboard)
             } footer: {
-                Text(
-                    "Only while the Mac app is in front; text that arrived earlier is never pasted " +
-                    "over what you copied since."
-                )
+                Text("Text from the phone replaces your clipboard as soon as it arrives.")
             }
 
             Section("Last sent") {
@@ -139,7 +146,7 @@ struct TransfersSettingsPage: View {
                     Text("No transfers yet.")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(Array(service.transferHistory.enumerated()), id: \.offset) { _, record in
+                    ForEach(service.transferHistory, id: \.self) { record in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(record.name)
                             Text(

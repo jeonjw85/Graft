@@ -3,6 +3,9 @@ package kr.jjw.graft.service
 import kr.jjw.graft.core.TransferDirection
 import kr.jjw.graft.files.TransferFailureKind
 
+/** How many finished transfers the app keeps, in memory and on disk. */
+const val TRANSFER_HISTORY_LIMIT = 50
+
 enum class TransferOutcome {
     Completed,
     Failed,
@@ -30,7 +33,7 @@ data class TransferRecord(
  * record. A repeated transfer id replaces its earlier row so a retry does not read as two transfers.
  */
 class TransferHistory(
-    private val capacity: Int = 50,
+    private val capacity: Int = TRANSFER_HISTORY_LIMIT,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val rows = mutableListOf<TransferRecord>()
@@ -46,7 +49,9 @@ class TransferHistory(
         error: TransferFailureKind?,
         destination: String?,
     ): TransferRecord {
-        rows.removeAll { it.id == id }
+        // Ids restart with every session, so a retry is the same id *and* the same file in the same
+        // direction; a different file reusing the id keeps its own row.
+        rows.removeAll { it.id == id && it.name == name && it.direction == direction }
 
         val row = TransferRecord(
             id = id,
