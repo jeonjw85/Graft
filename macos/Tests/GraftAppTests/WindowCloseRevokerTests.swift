@@ -2,6 +2,7 @@ import AppKit
 import XCTest
 @testable import GraftApp
 
+@MainActor
 final class WindowCloseRevokerTests: XCTestCase {
     func testClosingTheWindowRunsTheAction() {
         let window = NSWindow(
