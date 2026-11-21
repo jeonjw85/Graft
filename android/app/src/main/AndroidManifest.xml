@@ -3,7 +3,6 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
 
     <!--
@@ -20,6 +19,13 @@
     <!-- Pairing works without a camera (code + fingerprint), so the lens is optional. -->
     <uses-feature
         android:name="android.hardware.camera"
+        android:required="false" />
+    <!--
+      The link is LAN-only, but Ethernet and USB adapters exist. Declaring Wi-Fi as required made
+      Play hide the app from tablets, desktop, and XR devices that have no Wi-Fi radio at all.
+    -->
+    <uses-feature
+        android:name="android.hardware.wifi"
         android:required="false" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

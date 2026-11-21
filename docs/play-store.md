@@ -10,7 +10,9 @@ Keep that file and its password backed up: losing it means losing the ability to
       app signing key.
 - [x] Upload `dist/Graft-0.1.2.aab` (versionCode 3, versionName 0.1.2). v0.1.1 lacked an app icon in
       the bundle, which Play rejects; v0.1.2 adds adaptive and legacy launcher icons.
-- [ ] Upload `dist/Graft-0.1.4.aab` (versionCode 5, versionName 0.1.4).
+- [ ] Upload `dist/Graft-0.1.5.aab` (versionCode 6, versionName 0.1.5). 0.1.4 declared
+      `android.hardware.wifi` as required (via the unused multicast permission), which hid the app
+      from Wi-Fi-less devices on Play.
 - [x] Store listing assets in `release/store/`:
       - `icon-512.png` — 512×512, 32-bit PNG, no transparency
       - `feature-1024x500.png` — 1024×500, no transparency, content inside the safe area
