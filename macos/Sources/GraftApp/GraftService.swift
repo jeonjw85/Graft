@@ -253,7 +253,7 @@ final class GraftService: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.refreshAdvertising()
+            Task { @MainActor in self?.refreshAdvertising() }
         }
     }
 

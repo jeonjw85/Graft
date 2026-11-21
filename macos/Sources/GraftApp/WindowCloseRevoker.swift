@@ -33,6 +33,7 @@ final class WindowCloseRevoker {
 enum PairingWindowLocator {
     static let title = "Pair with a phone"
 
+    @MainActor
     static func find(in windows: [NSWindow]) -> NSWindow? {
         windows.first { $0.title == title }
     }
