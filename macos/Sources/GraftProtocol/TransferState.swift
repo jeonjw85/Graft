@@ -4,7 +4,7 @@ public enum TransferPhase: String, CaseIterable, Sendable {
     case idle, offered, accepted, sending, receiving, verifying, completed, failed, cancelled
 }
 
-public enum TransferDirection: String, Sendable {
+public enum TransferDirection: String, Codable, Sendable {
     case send, receive
 }
 

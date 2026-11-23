@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "id": "a1b2c3d4-0000-4000-8000-000000000021",
+  "type": "notification.reply",
+  "ts": 1762752000000,
+  "payload": {
+    "key": "0|com.kakao.talk|42|null|10123",
+    "text": "지금 바로 갈게요!"
+  }
+}

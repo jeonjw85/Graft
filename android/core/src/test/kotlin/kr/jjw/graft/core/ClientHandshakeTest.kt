@@ -1,8 +1,10 @@
 package kr.jjw.graft.core
 
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class ClientHandshakeTest {
@@ -34,5 +36,10 @@ class ClientHandshakeTest {
 
         assertEquals("hello", envelope.type)
         assertEquals("1", envelope.payload.jsonObject["proto"]?.jsonPrimitive?.content)
+        val caps = envelope.payload.jsonObject["caps"]?.jsonArray?.map { it.jsonPrimitive.content }
+        assertTrue(caps?.contains("device.status") == true)
+        assertTrue(caps?.contains("device.ring") == true)
+        assertTrue(caps?.contains("notification.reply") == true)
+        assertTrue(caps?.contains("notification.dismiss") == true)
     }
 }

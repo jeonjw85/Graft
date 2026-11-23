@@ -68,12 +68,17 @@ If `v` is not `1`, the receiver sends `error{code:"proto_unsupported"}` and clos
 | `pair.request` | Android -> Mac | `token`, `deviceId`, `name`, `platform` |
 | `pair.ok` | Mac -> Android | `deviceId`, `name`, `platform` |
 | `clipboard.update` | Both | `kind`, `body`, `ts` |
-| `notification.posted` | Android -> Mac | `pkg`, `app`, `title`, `text`, `ts`, `key`, `priority` |
+| `notification.posted` | Android -> Mac | `pkg`, `app`, `title`, `text`, `ts`, `key`, `priority`, `replyable` (optional) |
+| `notification.removed` | Android -> Mac | `key` |
+| `notification.dismiss` | Mac -> Android | `key` |
+| `notification.reply` | Mac -> Android | `key`, `text` |
 | `file.offer` | Both | `tid`, `name`, `size`, `mime` |
 | `file.accept` | Receiver -> sender | `tid`, `offset` |
 | `file.reject` | Receiver -> sender | `tid`, `reason` |
 | `file.complete` | Sender -> receiver | `tid`, `sha256` |
 | `file.cancel` | Both | `tid` |
+| `device.status` | Android -> Mac | `battery`, `charging` |
+| `device.ring` | Mac -> Android | `action` |
 | `error` | Both | `code`, `message` |
 
 ### 2.1 Field details
@@ -89,7 +94,7 @@ If `v` is not `1`, the receiver sends `error{code:"proto_unsupported"}` and clos
 | `proto` | integer >= 1 | Highest protocol version the sender supports |
 | `caps` | string array (<= 32) | Supported capabilities |
 
-`caps` values: `file.transfer`, `clipboard.text`, `notification.post`.
+`caps` values: `file.transfer`, `clipboard.text`, `notification.post`, `notification.reply`, `notification.dismiss`, `device.status`, `device.ring`.
 
 **`pair.request`** is the only message allowed on a connection that is not yet trusted. Any other message is answered with `error{code:"unpaired"}` and the connection is closed.
 

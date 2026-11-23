@@ -12,11 +12,16 @@
     { "$ref": "#/$defs/pairOk" },
     { "$ref": "#/$defs/clipboardUpdate" },
     { "$ref": "#/$defs/notificationPosted" },
+    { "$ref": "#/$defs/notificationRemoved" },
+    { "$ref": "#/$defs/notificationDismiss" },
+    { "$ref": "#/$defs/notificationReply" },
     { "$ref": "#/$defs/fileOffer" },
     { "$ref": "#/$defs/fileAccept" },
     { "$ref": "#/$defs/fileReject" },
     { "$ref": "#/$defs/fileComplete" },
     { "$ref": "#/$defs/fileCancel" },
+    { "$ref": "#/$defs/deviceStatus" },
+    { "$ref": "#/$defs/deviceRing" },
     { "$ref": "#/$defs/error" }
   ],
   "$defs": {
@@ -38,7 +43,17 @@
     "caps": {
       "type": "array",
       "maxItems": 32,
-      "items": { "enum": ["file.transfer", "clipboard.text", "notification.post"] }
+      "items": {
+        "enum": [
+          "file.transfer",
+          "clipboard.text",
+          "notification.post",
+          "notification.reply",
+          "notification.dismiss",
+          "device.status",
+          "device.ring"
+        ]
+      }
     },
     "tid": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
 
@@ -213,7 +228,67 @@
         "text": { "type": "string", "maxLength": 2048 },
         "ts": { "type": "integer" },
         "key": { "type": "string", "minLength": 1 },
-        "priority": { "enum": ["low", "normal", "high"] }
+        "priority": { "enum": ["low", "normal", "high"] },
+        "replyable": { "type": "boolean" }
+      }
+    },
+
+    "notificationRemoved": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "notification.removed" },
+            "payload": { "$ref": "#/$defs/notificationKeyPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+
+    "notificationDismiss": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "notification.dismiss" },
+            "payload": { "$ref": "#/$defs/notificationKeyPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+
+    "notificationKeyPayload": {
+      "type": "object",
+      "required": ["key"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1, "maxLength": 512 }
+      }
+    },
+
+    "notificationReply": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "notification.reply" },
+            "payload": { "$ref": "#/$defs/notificationReplyPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+
+    "notificationReplyPayload": {
+      "type": "object",
+      "required": ["key", "text"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 2048 }
       }
     },
 
@@ -325,6 +400,49 @@
       "required": ["tid"],
       "properties": {
         "tid": { "$ref": "#/$defs/tid" }
+      }
+    },
+
+    "deviceStatus": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "device.status" },
+            "payload": { "$ref": "#/$defs/deviceStatusPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "deviceStatusPayload": {
+      "type": "object",
+      "required": ["battery", "charging"],
+      "properties": {
+        "battery": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "charging": { "type": "boolean" }
+      }
+    },
+
+    "deviceRing": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "device.ring" },
+            "payload": { "$ref": "#/$defs/deviceRingPayload" }
+          },
+          "required": ["type", "payload"]
+        }
+      ]
+    },
+    "deviceRingPayload": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": { "enum": ["start", "stop"] }
       }
     },
 
