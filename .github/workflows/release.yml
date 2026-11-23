@@ -1,0 +1,154 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Verify version and signing secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          GRADLE_VERSION="$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' android/app/build.gradle.kts | head -1)"
+          if [[ "$GRADLE_VERSION" != "$VERSION" ]]; then
+            echo "error: tag is v$VERSION but android/app/build.gradle.kts says '$GRADLE_VERSION'" >&2
+            exit 1
+          fi
+          if [[ -z "$KEYSTORE_B64" || -z "$KEYSTORE_PASS" || -z "$KEY_ALIAS" || -z "$KEY_PASS" ]]; then
+            echo "error: missing Android signing secrets (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD)" >&2
+            exit 1
+          fi
+
+      - name: Build signed release APK
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          cat > android/local.properties <<EOF
+          graft.storeFile=$RUNNER_TEMP/release.jks
+          graft.storePassword=$KEYSTORE_PASS
+          graft.keyAlias=$KEY_ALIAS
+          graft.keyPassword=$KEY_PASS
+          EOF
+
+          (cd android && ./gradlew :app:assembleRelease)
+
+          BUILD_TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          "$BUILD_TOOLS/apksigner" verify --print-certs \
+            android/app/build/outputs/apk/release/app-release.apk | head -3
+
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/Graft-$VERSION.apk"
+
+      - name: Clean up signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks" android/local.properties
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: dist/Graft-*.apk
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PLIST_VERSION="$(sed -n 's/.*CFBundleShortVersionString: "\(.*\)".*/\1/p' macos/project.yml | head -1)"
+          if [[ "$PLIST_VERSION" != "$VERSION" ]]; then
+            echo "error: tag is v$VERSION but macos/project.yml says '$PLIST_VERSION'" >&2
+            exit 1
+          fi
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Build DMG
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          xcodegen generate --spec macos/project.yml
+          xcodebuild build -project macos/Graft.xcodeproj -scheme Graft -configuration Release \
+            -derivedDataPath dist/derived CODE_SIGNING_ALLOWED=NO
+
+          APP="dist/derived/Build/Products/Release/Graft.app"
+          APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+          if [[ "$APP_VERSION" != "$VERSION" ]]; then
+            echo "error: built app reports $APP_VERSION, not $VERSION" >&2
+            exit 1
+          fi
+          codesign --force --deep --sign - "$APP"
+
+          mkdir -p dist/dmg
+          cp -R "$APP" dist/dmg/
+          ln -s /Applications dist/dmg/Applications
+          hdiutil create -volname "Graft $VERSION" -srcfolder dist/dmg -ov -format UDZO \
+            "dist/Graft-$VERSION.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/Graft-*.dmg
+          if-no-files-found: error
+
+  publish:
+    needs: [android, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS and publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          (cd dist && sha256sum "Graft-$VERSION.dmg" "Graft-$VERSION.apk" > SHA256SUMS && cat SHA256SUMS)
+
+          NOTES_FILE="docs/release-notes/v$VERSION.md"
+          if [[ -f "$NOTES_FILE" ]]; then
+            gh release create "$GITHUB_REF_NAME" \
+              "dist/Graft-$VERSION.dmg" \
+              "dist/Graft-$VERSION.apk" \
+              dist/SHA256SUMS \
+              --title "Graft v$VERSION" \
+              --notes-file "$NOTES_FILE"
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "dist/Graft-$VERSION.dmg" \
+              "dist/Graft-$VERSION.apk" \
+              dist/SHA256SUMS \
+              --title "Graft v$VERSION" \
+              --generate-notes
+          fi

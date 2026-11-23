@@ -70,5 +70,5 @@ hdiutil create -volname "Graft $VERSION" -srcfolder "$DIST/dmg" -ov -format UDZO
 rm -rf "$DIST/dmg" "$DIST/derived"
 
 echo "==> Checksums"
-(cd "$DIST" && shasum -a 256 "Graft-$VERSION.dmg" "Graft-$VERSION.apk" "Graft-$VERSION.aab" > SHA256SUMS)
+(cd "$DIST" && shasum -a 256 "Graft-$VERSION.dmg" "Graft-$VERSION.apk" > SHA256SUMS)
 cat "$DIST/SHA256SUMS"
