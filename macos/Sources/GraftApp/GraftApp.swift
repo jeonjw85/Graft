@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 import GraftMacKit
 import GraftProtocol
 
@@ -32,11 +33,40 @@ struct GraftApp: App {
 ///
 /// A MenuBarExtra window is created lazily, so starting from the view's `task` would leave the
 /// app idle until the user clicked the icon — the phone would never connect.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Dark only by design; the menu bar icon keeps system colouring.
         NSApp.appearance = NSAppearance(named: .darkAqua)
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        SystemNotificationCenter.registerCategories()
         GraftLauncher.shared.startIfNeeded()
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let key = response.notification.request.identifier
+        let actionId = response.actionIdentifier
+        let replyText = (response as? UNTextInputNotificationResponse)?.userText
+        Task { @MainActor in
+            if actionId == SystemNotificationCenter.replyActionId, let replyText, !replyText.isEmpty {
+                GraftService.shared.sendNotificationReply(key: key, text: replyText)
+            } else if actionId == UNNotificationDismissActionIdentifier {
+                GraftService.shared.sendNotificationDismiss(key: key)
+            }
+        }
+        completionHandler()
     }
 }
 

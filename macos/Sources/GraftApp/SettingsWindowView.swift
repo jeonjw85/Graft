@@ -53,7 +53,7 @@ struct NotificationsSettingsPage: View {
                     HStack(spacing: 6) {
                         Image(systemName: access.symbol)
                             .foregroundStyle(access.tint)
-                        Text(service.notificationStatus)
+                        Text(LocalizedStringKey(service.notificationStatus))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -105,9 +105,10 @@ struct ClipboardSettingsPage: View {
     var body: some View {
         Form {
             Section {
+                Toggle("Share Mac clipboard automatically", isOn: $service.autoShareClipboard)
                 Toggle("Copy received clipboard automatically", isOn: $service.autoCopyClipboard)
             } footer: {
-                Text("Text from the phone replaces your clipboard as soon as it arrives.")
+                Text("New text copied on this Mac is sent to your phone automatically (concealed password items are skipped). Text from the phone replaces your clipboard as soon as it arrives.")
             }
 
             Section("Last sent") {
@@ -137,35 +138,72 @@ struct TransfersSettingsPage: View {
                         .truncationMode(.middle)
                         .textSelection(.enabled)
                     Spacer()
+                    Button("Choose…") { chooseReceiveDirectory() }
                     Button("Reveal") { service.revealReceiveDirectory() }
                 }
             }
 
-            Section("History") {
+            Section {
+                Toggle("Send new Mac screenshots automatically", isOn: $service.autoSendScreenshots)
+            } footer: {
+                Text("Watches \(ScreenshotWatcher.defaultScreenshotDirectory().path) for new macOS screenshots while connected.")
+            }
+
+            Section {
                 if service.transferHistory.isEmpty {
                     Text("No transfers yet.")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(service.transferHistory, id: \.self) { record in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(record.name)
-                            Text(
-                                "\(TransferHistory.describe(record.direction))  ·  " +
-                                "\(Self.size(record.bytes))  ·  " +
-                                TransferHistory.describe(record.failure)
-                            )
-                            .font(.caption)
-                            .foregroundStyle(record.failure == nil ? Palette.onSurfaceVariant : Palette.warning)
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(record.name)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Text(
+                                    "\(NSLocalizedString(TransferHistory.describe(record.direction), comment: ""))  ·  " +
+                                    "\(Self.size(record.bytes))  ·  " +
+                                    NSLocalizedString(TransferHistory.describe(record.failure), comment: "")
+                                )
+                                .font(.caption)
+                                .foregroundStyle(record.failure == nil ? Palette.onSurfaceVariant : Palette.warning)
+                            }
+                            Spacer()
+                            if let path = record.destinationPath,
+                               record.failure == nil,
+                               FileManager.default.fileExists(atPath: path) {
+                                Button("Reveal") { service.revealFile(atPath: path) }
+                                    .buttonStyle(.link)
+                            }
                         }
                     }
+                }
+            } header: {
+                HStack {
+                    Text("History")
+                    Spacer()
+                    Button("Clear") { service.clearTransferHistory() }
+                        .buttonStyle(.link)
+                        .disabled(service.transferHistory.isEmpty)
                 }
             }
         }
         .formStyle(.grouped)
     }
 
+    private func chooseReceiveDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = service.receiveDirectory
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        service.updateReceiveDirectory(url)
+    }
+
     static func size(_ bytes: UInt64) -> String {
-        let units = ["B", "KB", "MiB", "GiB"]
+        let units = ["B", "KiB", "MiB", "GiB"]
         var value = Double(bytes)
         var unit = 0
         while value >= 1024 && unit < units.count - 1 {
@@ -181,6 +219,16 @@ struct AboutSettingsPage: View {
 
     var body: some View {
         Form {
+            Section("Startup") {
+                Toggle(
+                    "Launch Graft at login",
+                    isOn: Binding(
+                        get: { service.launchAtLogin },
+                        set: { service.setLaunchAtLogin($0) }
+                    )
+                )
+            }
+
             Section {
                 LabeledContent("Version", value: service.versionText)
                 LabeledContent("Protocol", value: "1")

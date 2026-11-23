@@ -1,5 +1,6 @@
 import XCTest
 @testable import GraftApp
+import GraftProtocol
 
 final class MenuStateTests: XCTestCase {
     func testIdleShowsPairAction() {
@@ -33,5 +34,23 @@ final class MenuStateTests: XCTestCase {
         )
         XCTAssertEqual(state.statusLabel, "Local network permission denied")
         XCTAssertTrue(state.canPair)
+    }
+
+    func testPeerDeviceStatusParsesBatteryAndPicksSymbol() throws {
+        let envelope = Envelope(
+            type: "device.status",
+            payload: .object([
+                "battery": .number(82),
+                "charging": .bool(false)
+            ])
+        )
+        let parsed = try XCTUnwrap(PeerDeviceStatus.parse(envelope))
+        XCTAssertEqual(parsed.battery, 82)
+        XCTAssertFalse(parsed.charging)
+        XCTAssertEqual(parsed.batterySymbol, "battery.75")
+
+        let charging = PeerDeviceStatus(battery: 15, charging: true)
+        XCTAssertEqual(charging.batterySymbol, "battery.100.bolt")
+        XCTAssertNil(PeerDeviceStatus.parse(Envelope(type: "ping", payload: .object([:]))))
     }
 }

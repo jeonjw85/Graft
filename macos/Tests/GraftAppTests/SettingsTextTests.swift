@@ -16,4 +16,25 @@ final class SettingsTextTests: XCTestCase {
         XCTAssertEqual(TransferHistory.describe(nil), "Completed")
         XCTAssertEqual(TransferHistory.describe(.hashMismatch), "Hash mismatch")
     }
+
+    func testEnglishAndKoreanLocalizationsHaveMatchingKeys() throws {
+        let appBundle = Bundle(for: GraftService.self)
+        let enPath = try XCTUnwrap(appBundle.path(forResource: "en", ofType: "lproj"))
+        let koPath = try XCTUnwrap(appBundle.path(forResource: "ko", ofType: "lproj"))
+
+        let enTable = try XCTUnwrap(
+            NSDictionary(contentsOfFile: "\(enPath)/Localizable.strings") as? [String: String]
+        )
+        let koTable = try XCTUnwrap(
+            NSDictionary(contentsOfFile: "\(koPath)/Localizable.strings") as? [String: String]
+        )
+
+        XCTAssertFalse(enTable.isEmpty)
+        XCTAssertEqual(Set(enTable.keys), Set(koTable.keys), "en and ko string keys must stay in sync")
+        XCTAssertEqual(koTable["Pair a phone"], "휴대폰 연결")
+        XCTAssertEqual(koTable["Connected to %@"], "%@에 연결됨")
+        for (key, value) in koTable {
+            XCTAssertFalse(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "empty ko value for \(key)")
+        }
+    }
 }

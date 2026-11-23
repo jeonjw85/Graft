@@ -1,10 +1,12 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import GraftMacKit
 
 /// The menu bar popover: the link state, then the three things a user does with it.
 struct MenuContent: View {
     @ObservedObject var service: GraftService
     @Environment(\.openWindow) private var openWindow
+    @State private var isDropTargeted = false
 
     private var summary: PopoverSummary {
         PopoverSummary.from(
@@ -53,6 +55,41 @@ struct MenuContent: View {
         .padding(16)
         .frame(width: 320)
         .background(Palette.background)
+        .overlay {
+            if isDropTargeted && service.menuState.isConnected {
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Palette.primary, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                    .background(Palette.background.opacity(0.92), in: RoundedRectangle(cornerRadius: 10))
+                    .overlay {
+                        VStack(spacing: 6) {
+                            Image(systemName: "arrow.up.doc")
+                                .font(.title2)
+                                .foregroundStyle(Palette.primary)
+                            Text("Drop files or folders to send")
+                                .font(.callout.weight(.medium))
+                        }
+                    }
+                    .padding(6)
+            }
+        }
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            handleDrop(providers)
+        }
+    }
+
+    private var localizedTitle: LocalizedStringKey {
+        switch service.menuState.status {
+        case .connected(let peer):
+            return "Connected to \(peer)"
+        case .idle:
+            return "Not connected"
+        case .searching:
+            return "Looking for your phone…"
+        case .pairing:
+            return "Waiting for the phone to scan…"
+        case .failed(let message):
+            return LocalizedStringKey(message)
+        }
     }
 
     private var header: some View {
@@ -61,12 +98,23 @@ struct MenuContent: View {
                 Circle()
                     .fill(Palette.color(for: Palette.tone(for: service.menuState.status)))
                     .frame(width: 8, height: 8)
-                Text(summary.title)
+                Text(localizedTitle)
                     .font(.headline)
                     .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 4)
+                if service.menuState.isConnected, let status = service.peerStatus {
+                    HStack(spacing: 3) {
+                        Image(systemName: status.batterySymbol)
+                            .foregroundStyle(status.battery <= 20 && !status.charging ? Palette.warning : Palette.onSurfaceVariant)
+                        Text("\(status.battery)%")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(Palette.onSurfaceVariant)
+                    }
+                    .accessibilityLabel("Phone battery \(status.battery) percent\(status.charging ? ", charging" : "")")
+                }
             }
             summary.detail.map {
-                Text($0)
+                Text(LocalizedStringKey($0))
                     .font(.caption)
                     .foregroundStyle(Palette.onSurfaceVariant)
                     .textSelection(.enabled)
@@ -95,11 +143,29 @@ struct MenuContent: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Button("Send a file…") { chooseFile() }
+                Button("Send files…") { chooseFiles() }
                     .disabled(!service.menuState.isConnected)
                 Spacer()
                 Button("Send clipboard") { service.sendClipboard() }
                     .disabled(!service.menuState.isConnected)
+            }
+
+            if service.menuState.isConnected {
+                Button {
+                    service.toggleRingPeer()
+                } label: {
+                    Label(
+                        service.isRingingPeer ? "Stop ringing" : "Ring phone",
+                        systemImage: service.isRingingPeer ? "bell.slash" : "bell.and.waves.left.and.right"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+            }
+
+            if service.menuState.isConnected && service.transfers.isEmpty {
+                Text("Tip: drop files or folders here to send.")
+                    .font(.caption2)
+                    .foregroundStyle(Palette.onSurfaceVariant)
             }
 
             let summary = TransferSummary.from(
@@ -109,20 +175,37 @@ struct MenuContent: View {
             )
             ForEach(summary.rows, id: \.id) { row in
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(row.progress.name).font(.caption)
+                    HStack(spacing: 6) {
+                        Text(row.progress.name)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                         Spacer()
                         Text("\(percent(row.progress))%")
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(Palette.onSurfaceVariant)
+                        Button {
+                            service.cancelTransfer(id: row.id)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(Palette.onSurfaceVariant)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Cancel transfer")
+                        .accessibilityLabel("Cancel \(row.progress.name)")
                     }
                     ProgressView(value: min(max(row.progress.fraction, 0), 1))
                         .controlSize(.small)
+                    if let metric = service.transferMetrics[row.id] {
+                        Text(metric.label)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(Palette.onSurfaceVariant)
+                    }
                 }
             }
 
             if let failure = service.transferFailure {
-                Text(failure)
+                Text(LocalizedStringKey(failure))
                     .font(.caption)
                     .foregroundStyle(Palette.error)
             }
@@ -175,13 +258,37 @@ struct MenuContent: View {
         progress.total == 0 ? 100 : Int(min(max(progress.fraction, 0), 1) * 100)
     }
 
-    private func chooseFile() {
+    private func chooseFiles() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        _ = service.sendFile(url: url)
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        service.sendFiles(urls: panel.urls)
+    }
+
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard service.menuState.isConnected else { return false }
+        let fileProviders = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
+        guard !fileProviders.isEmpty else { return false }
+
+        for provider in fileProviders {
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                let url: URL?
+                if let data = item as? Data {
+                    url = URL(dataRepresentation: data, relativeTo: nil)
+                } else if let direct = item as? URL {
+                    url = direct
+                } else {
+                    url = nil
+                }
+                guard let fileURL = url, fileURL.isFileURL else { return }
+                Task { @MainActor in
+                    _ = service.sendFile(url: fileURL)
+                }
+            }
+        }
+        return true
     }
 
     /// The macOS 13 fallback; newer systems use `SettingsLink`.

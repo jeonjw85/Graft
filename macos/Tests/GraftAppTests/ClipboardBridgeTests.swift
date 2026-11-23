@@ -89,6 +89,62 @@ final class ClipboardBridgeTests: XCTestCase {
         let bridge = ClipboardBridge(writer: FakeWriter(), reader: FakeReader(value: ""))
         XCTAssertNil(bridge.outgoing())
     }
+
+    private final class MutableReader: ClipboardReading {
+        var value: String?
+        var pngData: Data?
+        var changeCount: Int = 1
+        var isConcealed: Bool = false
+        func read() -> String? { value }
+        func readImagePNG() -> Data? { pngData }
+    }
+
+    func testPollOutgoingEmitsOnlyWhenChangeCountMovesAndSkipsConcealed() throws {
+        let reader = MutableReader()
+        reader.value = "initial"
+        let writer = FakeWriter()
+        let bridge = ClipboardBridge(writer: writer, reader: reader)
+
+        // Already on the clipboard at startup -> must not send.
+        XCTAssertNil(bridge.pollOutgoing())
+
+        // Concealed password manager item -> skipped even when changeCount advances.
+        reader.value = "super-secret"
+        reader.isConcealed = true
+        reader.changeCount += 1
+        XCTAssertNil(bridge.pollOutgoing())
+
+        // Normal user copy -> emitted once.
+        reader.value = "copied on mac"
+        reader.isConcealed = false
+        reader.changeCount += 1
+        let envelope = try XCTUnwrap(bridge.pollOutgoing())
+        XCTAssertEqual(envelope.payload.objectValue?["body"]?.stringValue, "copied on mac")
+        XCTAssertNil(bridge.pollOutgoing())
+    }
+
+    func testReceivedClipboardDoesNotEchoBackOnPoll() {
+        let reader = MutableReader()
+        let writer = FakeWriter()
+        let bridge = ClipboardBridge(writer: writer, reader: reader)
+
+        XCTAssertTrue(bridge.received(textUpdate("from android")))
+        reader.value = "from android"
+        reader.changeCount += 1
+
+        XCTAssertNil(bridge.pollOutgoing(), "inbound peer text must not echo back")
+    }
+
+    func testOutgoingImageReturnsPngUnlessConcealed() {
+        let reader = MutableReader()
+        reader.pngData = Data([0x89, 0x50, 0x4E, 0x47])
+        let bridge = ClipboardBridge(writer: FakeWriter(), reader: reader)
+
+        XCTAssertEqual(bridge.outgoingImagePNG(), reader.pngData)
+
+        reader.isConcealed = true
+        XCTAssertNil(bridge.outgoingImagePNG())
+    }
 }
 
 extension JSONValue {

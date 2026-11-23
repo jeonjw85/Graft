@@ -42,7 +42,7 @@ struct PairingWindowView: View {
                     } else {
                         ProgressView()
                     }
-                    Text(message ?? "")
+                    Text(LocalizedStringKey(message ?? ""))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(Palette.onSurfaceVariant)
                 }
@@ -145,7 +145,7 @@ struct PairingWindowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func row(label: String, value: String, monospaced: Bool, size: CGFloat) -> some View {
+    private func row(label: LocalizedStringKey, value: String, monospaced: Bool, size: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(.caption)

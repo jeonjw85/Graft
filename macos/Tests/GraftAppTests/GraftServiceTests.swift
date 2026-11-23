@@ -179,4 +179,110 @@ final class GraftServiceTests: XCTestCase {
             "forgetting must clear the pending record so it cannot be written back"
         )
     }
+
+    func testLocalAddressPrefersPhysicalLanOverVpnAndDocker() {
+        let selected = GraftService.selectLocalAddress(from: [
+            (name: "lo0", ip: "127.0.0.1"),
+            (name: "en0", ip: "192.168.1.42"),
+            (name: "bridge100", ip: "192.168.64.1"),
+            (name: "utun4", ip: "100.64.0.12"),
+            (name: "awdl0", ip: "169.254.10.1"),
+        ])
+        XCTAssertEqual(selected, "192.168.1.42")
+
+        let ethernetFallback = GraftService.selectLocalAddress(from: [
+            (name: "utun3", ip: "10.8.0.2"),
+            (name: "en6", ip: "192.168.0.15"),
+        ])
+        XCTAssertEqual(ethernetFallback, "192.168.0.15")
+    }
+
+    func testAutoShareClipboardSurvivesARestart() {
+        let suite = "graft.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let tag = temporaryIdentityTag()
+        defer { DeviceIdentity.delete(tag: tag) }
+
+        let first = GraftService(storeURL: temporaryStoreURL(), identityTag: tag, defaults: defaults)
+        first.autoShareClipboard = false
+
+        let second = GraftService(storeURL: temporaryStoreURL(), identityTag: tag, defaults: defaults)
+        XCTAssertFalse(second.autoShareClipboard)
+    }
+
+    func testCustomReceiveDirectorySurvivesARestart() {
+        let suite = "graft.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let tag = temporaryIdentityTag()
+        defer { DeviceIdentity.delete(tag: tag) }
+        let custom = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("graft-custom-dir-\(UUID().uuidString)", isDirectory: true)
+
+        let first = GraftService(storeURL: temporaryStoreURL(), identityTag: tag, defaults: defaults)
+        first.updateReceiveDirectory(custom)
+
+        let second = GraftService(storeURL: temporaryStoreURL(), identityTag: tag, defaults: defaults)
+        XCTAssertEqual(second.receiveDirectory.path, custom.path)
+    }
+
+    func testZipDirectoryCompressesAFolderIntoAZipArchive() throws {
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("graft-folder-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data("hello folder".utf8).write(to: folder.appendingPathComponent("note.txt"))
+
+        let result = try XCTUnwrap(GraftService.zipDirectory(folder))
+        defer { try? FileManager.default.removeItem(at: result.container) }
+
+        XCTAssertEqual(result.archive.lastPathComponent, "\(folder.lastPathComponent).zip")
+        let size = (try FileManager.default.attributesOfItem(atPath: result.archive.path)[.size] as? NSNumber)?.intValue ?? 0
+        XCTAssertGreaterThan(size, 0)
+    }
+
+    func testScreenshotWatcherDetectsOnlyNewScreenshots() throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("graft-shots-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try Data("old".utf8).write(to: dir.appendingPathComponent("Screenshot 2026-11-23 at 10.00.00.png"))
+        let watcher = ScreenshotWatcher(directoryProvider: { dir })
+        watcher.baseline()
+        XCTAssertTrue(watcher.pollNewScreenshots().isEmpty)
+
+        // Unrelated file & zero-byte placeholder must be ignored.
+        try Data("notes".utf8).write(to: dir.appendingPathComponent("notes.png"))
+        try Data().write(to: dir.appendingPathComponent("Screenshot 2026-11-23 at 10.01.00.png"))
+        XCTAssertTrue(watcher.pollNewScreenshots().isEmpty)
+
+        // Finished Korean & English screenshots are emitted once each.
+        let korean = dir.appendingPathComponent("스크린샷 2026-11-23 오후 2.10.00.png")
+        try Data("png-bytes".utf8).write(to: korean)
+        try Data("png-bytes".utf8).write(to: dir.appendingPathComponent("Screenshot 2026-11-23 at 10.01.00.png"))
+
+        let detected = watcher.pollNewScreenshots().map(\.lastPathComponent).sorted()
+        XCTAssertEqual(detected, [
+            "Screenshot 2026-11-23 at 10.01.00.png",
+            "스크린샷 2026-11-23 오후 2.10.00.png",
+        ])
+        XCTAssertTrue(watcher.pollNewScreenshots().isEmpty)
+    }
+
+    func testAutoSendScreenshotsDefaultsToOffAndPersists() {
+        let suite = "graft.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let tag = temporaryIdentityTag()
+        defer { DeviceIdentity.delete(tag: tag) }
+
+        let first = GraftService(storeURL: temporaryStoreURL(), identityTag: tag, defaults: defaults)
+        XCTAssertFalse(first.autoSendScreenshots)
+        first.autoSendScreenshots = true
+
+        let second = GraftService(storeURL: temporaryStoreURL(), identityTag: tag, defaults: defaults)
+        XCTAssertTrue(second.autoSendScreenshots)
+    }
 }

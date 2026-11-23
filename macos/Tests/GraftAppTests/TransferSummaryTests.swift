@@ -46,4 +46,20 @@ final class TransferSummaryTests: XCTestCase {
 
         XCTAssertEqual(summary.failure, "The file did not arrive intact")
     }
+
+    func testSpeedTrackerComputesThroughputAndETA() throws {
+        let tracker = TransferSpeedTracker()
+        let t0 = Date(timeIntervalSince1970: 1_000)
+
+        let initial = [UInt32(1): TransferProgress(name: "video.mp4", confirmed: 0, total: 20 * 1024 * 1024, direction: .send)]
+        XCTAssertTrue(tracker.update(transfers: initial, now: t0).isEmpty)
+
+        // Two seconds later: 4 MiB moved -> 2.0 MiB/s, 16 MiB remaining -> 8s left.
+        let later = [UInt32(1): TransferProgress(name: "video.mp4", confirmed: 4 * 1024 * 1024, total: 20 * 1024 * 1024, direction: .send)]
+        let metrics = try XCTUnwrap(tracker.update(transfers: later, now: t0.addingTimeInterval(2))[1])
+
+        XCTAssertEqual(metrics.label, "2.0 MiB/s · 8s left")
+        XCTAssertEqual(TransferMetrics.formatETA(0.4), "< 1s left")
+        XCTAssertEqual(TransferMetrics.formatETA(125), "2m 5s left")
+    }
 }

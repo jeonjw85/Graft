@@ -4,6 +4,10 @@ options:
   deploymentTarget:
     macOS: "13.0"
   createIntermediateGroups: true
+  knownRegions:
+    - en
+    - ko
+  developmentLanguage: en
 
 packages:
   Graft:

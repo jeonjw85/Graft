@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Foundation
+import ServiceManagement
 import GraftMacKit
 import GraftProtocol
 
@@ -19,28 +20,57 @@ final class GraftService: ObservableObject {
     @Published private(set) var qrImage: NSImage?
     @Published private(set) var manualPairing: PairingService.NumericPairing?
     @Published private(set) var transfers: [UInt32: TransferProgress] = [:]
+    @Published private(set) var transferMetrics: [UInt32: TransferMetrics] = [:]
     @Published private(set) var transferHistory: [MacTransferRecord] = []
 
     private let history = TransferHistory()
+    private let historyStore: TransferHistoryStore
+    private let speedTracker = TransferSpeedTracker()
+    private var outgoingTempArchives: [UInt32: URL] = [:]
     private var recordedOutcomes: [String: TransferFailure?] = [:]
     private var pairingGeneration = 0
     private var lastTransferSucceeded = false
     @Published private(set) var transferFailure: String?
     @Published private(set) var receiveDirectory: URL = GraftService.defaultReceiveDirectory()
+    @Published private(set) var launchAtLogin = false
     @Published var autoCopyClipboard = true {
         didSet { defaults.set(autoCopyClipboard, forKey: Self.autoCopyKey) }
+    }
+    @Published var autoShareClipboard = true {
+        didSet {
+            defaults.set(autoShareClipboard, forKey: Self.autoShareKey)
+            if autoShareClipboard {
+                clipboard.syncChangeCount()
+            }
+        }
+    }
+    @Published var autoSendScreenshots = false {
+        didSet {
+            defaults.set(autoSendScreenshots, forKey: Self.autoScreenshotsKey)
+            if autoSendScreenshots {
+                screenshotWatcher.baseline()
+            } else {
+                screenshotWatcher.reset()
+            }
+        }
     }
     @Published private(set) var notificationPreviews = true {
         didSet { defaults.set(notificationPreviews, forKey: Self.previewsKey) }
     }
 
     private static let autoCopyKey = "graft.autoCopyClipboard"
+    private static let autoShareKey = "graft.autoShareClipboard"
+    private static let autoScreenshotsKey = "graft.autoSendScreenshots"
     private static let previewsKey = "graft.notificationPreviews"
+    private static let receiveDirectoryKey = "graft.receiveDirectory"
     @Published private(set) var notificationsAllowed: Bool?
     /// Address the phone is expected at, shown in the popover.
     @Published private(set) var peerAddress: String?
+    @Published private(set) var peerStatus: PeerDeviceStatus?
+    @Published private(set) var isRingingPeer = false
     @Published private(set) var lastSharedClipboard: String?
     @Published private(set) var recentNotifications: [NotificationPresenter.Recent] = []
+    private var ringResetTask: DispatchWorkItem?
 
     private let port: UInt16
     private let defaults: UserDefaults
@@ -55,6 +85,7 @@ final class GraftService: ObservableObject {
     private let coordinators = CoordinatorPool()
     private var nextTransferId: UInt32 = 1
     private let clipboard = ClipboardBridge(writer: PasteboardWriter(), reader: PasteboardReader())
+    private let screenshotWatcher = ScreenshotWatcher()
     private let notifications = NotificationPresenter(
         port: SystemNotificationCenter(),
         authorization: SystemNotificationAuthorization()
@@ -95,7 +126,48 @@ final class GraftService: ObservableObject {
 
     /// Shows the received files in Finder.
     func revealReceiveDirectory() {
+        try? FileManager.default.createDirectory(at: receiveDirectory, withIntermediateDirectories: true)
         NSWorkspace.shared.activateFileViewerSelecting([receiveDirectory])
+    }
+
+    /// Reveals a single received file in Finder when it still exists on disk.
+    func revealFile(atPath path: String) {
+        let url = URL(fileURLWithPath: path)
+        if FileManager.default.fileExists(atPath: path) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            revealReceiveDirectory()
+        }
+    }
+
+    /// Updates the destination folder for newly received files and persists the choice.
+    func updateReceiveDirectory(_ url: URL) {
+        receiveDirectory = url
+        defaults.set(url.path, forKey: Self.receiveDirectoryKey)
+        for coordinator in coordinators.all {
+            coordinator.directory = url
+        }
+    }
+
+    /// Clears persisted and in-memory transfer history.
+    func clearTransferHistory() {
+        history.clear()
+        historyStore.clear()
+        transferHistory = []
+    }
+
+    /// Registers or unregisters Graft as a macOS login item via SMAppService.
+    func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            lastError = error
+        }
+        launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 
     /// Asks for notification permission once, so banners can appear the first time a phone alerts.
@@ -151,6 +223,7 @@ final class GraftService: ObservableObject {
     init(
         port: UInt16 = 47800,
         storeURL: URL? = nil,
+        historyStoreURL: URL? = nil,
         clock: @escaping () -> Date = Date.init,
         identityTag: String = "kr.jjw.graft.mac",
         defaults: UserDefaults = .standard
@@ -158,7 +231,13 @@ final class GraftService: ObservableObject {
         self.port = port
         self.clock = clock
         self.defaults = defaults
-        self.store = PeerStore(url: storeURL ?? Self.defaultStoreURL())
+        let resolvedStoreURL = storeURL ?? Self.defaultStoreURL()
+        self.store = PeerStore(url: resolvedStoreURL)
+        self.historyStore = TransferHistoryStore(
+            file: historyStoreURL ?? resolvedStoreURL
+                .deletingLastPathComponent()
+                .appendingPathComponent("transfer-history.json")
+        )
 
         do {
             let identity = try DeviceIdentity.loadOrCreate(tag: identityTag)
@@ -175,12 +254,21 @@ final class GraftService: ObservableObject {
         }
 
         self.peers = store.load()
+        self.history.restore(historyStore.load())
+        self.transferHistory = history.records
+
+        if let savedDir = defaults.string(forKey: Self.receiveDirectoryKey), !savedDir.isEmpty {
+            self.receiveDirectory = URL(fileURLWithPath: savedDir, isDirectory: true)
+        }
+        self.launchAtLogin = SMAppService.mainApp.status == .enabled
 
         // Read the saved choices on every launch; a privacy toggle that resets itself is a bug.
         let previews = defaults.object(forKey: Self.previewsKey) as? Bool ?? false
         self.notificationPreviews = previews
         self.notifications.showPreviews = previews
         self.autoCopyClipboard = defaults.object(forKey: Self.autoCopyKey) as? Bool ?? true
+        self.autoShareClipboard = defaults.object(forKey: Self.autoShareKey) as? Bool ?? true
+        self.autoSendScreenshots = defaults.object(forKey: Self.autoScreenshotsKey) as? Bool ?? false
     }
 
     deinit {
@@ -314,8 +402,11 @@ final class GraftService: ObservableObject {
         server = nil
         recordedOutcomes.removeAll()
         lastTransferSucceeded = false
-        history.clear()
-        transferHistory = []
+        speedTracker.reset()
+        transferMetrics = [:]
+        peerStatus = nil
+        resetRingState()
+        cleanupAllTempArchives()
     }
 
     func markStarted() {
@@ -514,9 +605,11 @@ final class GraftService: ObservableObject {
                 self.connection = connection
                 self.coordinators.coordinator(for: key)?.onControl(envelope)
                 self.handleClipboard(envelope)
+                self.handleDeviceStatus(envelope)
                 if self.notifications.present(envelope) {
                     self.recentNotifications = self.notifications.recent
                 }
+                self.notifications.handleRemoval(envelope)
                 self.syncTransfers()
                 self.publishState(for: session)
                 self.persistPairingIfNeeded()
@@ -555,6 +648,8 @@ final class GraftService: ObservableObject {
         if sessions.isEmpty, case .connected = menuState.status {
             menuState = MenuState(status: .searching, peerName: nil)
             peerAddress = nil
+            peerStatus = nil
+            resetRingState()
         }
     }
 
@@ -569,7 +664,18 @@ final class GraftService: ObservableObject {
                 coordinators.remove(key)
             }
         }
+        var stalled = false
+        for coordinator in coordinators.all {
+            if coordinator.checkStalls(now: now) {
+                stalled = true
+            }
+        }
+        if stalled {
+            syncTransfers()
+        }
         refreshPairingState(now: now)
+        pollClipboard(now: now)
+        pollScreenshots()
     }
 
     private func publishState(for session: ConnectionSession) {
@@ -577,6 +683,10 @@ final class GraftService: ObservableObject {
         case .ready:
             let name = peers.first { $0.fingerprint == session.peerFingerprint }?.name ?? "your phone"
             if session.peerFingerprint?.isEmpty == false, menuState.status != .connected(peer: name) {
+                clipboard.syncChangeCount()
+                if autoSendScreenshots {
+                    screenshotWatcher.baseline()
+                }
                 menuState = MenuState(status: .connected(peer: name), peerName: name)
             }
         case .disconnected:
@@ -606,6 +716,67 @@ final class GraftService: ObservableObject {
         qrImage = nil
     }
 
+    // MARK: - Device status & ring
+
+    private func handleDeviceStatus(_ envelope: Envelope) {
+        if let status = PeerDeviceStatus.parse(envelope) {
+            peerStatus = status
+        }
+    }
+
+    /// Starts or stops ringing the connected phone to help locate it.
+    func toggleRingPeer() {
+        guard let connection, menuState.isConnected else { return }
+        let start = !isRingingPeer
+        let envelope = Envelope(
+            type: "device.ring",
+            payload: .object(["action": .string(start ? "start" : "stop")])
+        )
+        try? connection.send(envelope)
+        ringResetTask?.cancel()
+        ringResetTask = nil
+        isRingingPeer = start
+        if start {
+            let work = DispatchWorkItem { [weak self] in
+                Task { @MainActor in
+                    self?.isRingingPeer = false
+                    self?.ringResetTask = nil
+                }
+            }
+            ringResetTask = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
+        }
+    }
+
+    private func resetRingState() {
+        ringResetTask?.cancel()
+        ringResetTask = nil
+        isRingingPeer = false
+    }
+
+    /// Sends an inline reply typed on a macOS notification banner back to the Android app.
+    func sendNotificationReply(key: String, text: String) {
+        guard let connection, menuState.isConnected, !key.isEmpty, !text.isEmpty else { return }
+        let envelope = Envelope(
+            type: "notification.reply",
+            payload: .object([
+                "key": .string(key),
+                "text": .string(NotificationPresenter.truncate(text, maxBytes: NotificationPresenter.maxBodyBytes))
+            ])
+        )
+        try? connection.send(envelope)
+    }
+
+    /// Tells the Android phone to dismiss the matching notification.
+    func sendNotificationDismiss(key: String) {
+        guard let connection, menuState.isConnected, !key.isEmpty else { return }
+        let envelope = Envelope(
+            type: "notification.dismiss",
+            payload: .object(["key": .string(key)])
+        )
+        try? connection.send(envelope)
+    }
+
     // MARK: - Clipboard
 
     private func handleClipboard(_ envelope: Envelope) {
@@ -621,32 +792,162 @@ final class GraftService: ObservableObject {
     }
 
     func sendClipboard() {
-        guard let envelope = clipboard.outgoing() else {
-            transferFailure = clipboard.lastError ?? "There is no text on the clipboard"
+        if let envelope = clipboard.outgoing() {
+            try? connection?.send(envelope)
+            clipboard.syncChangeCount()
+            lastSharedClipboard = envelope.payload.objectValue?["body"]?.stringValue
             return
         }
-        try? connection?.send(envelope)
+        if let pngData = clipboard.outgoingImagePNG(), !pngData.isEmpty {
+            clipboard.syncChangeCount()
+            _ = sendTempImagePNG(pngData)
+            return
+        }
+        transferFailure = clipboard.lastError ?? "There is no text or image on the clipboard"
+    }
+
+    @discardableResult
+    private func sendTempImagePNG(_ data: Data) -> Bool {
+        guard let connection,
+              let coordinator = coordinators.coordinator(for: ObjectIdentifier(connection)) ?? coordinators.all.first else {
+            transferFailure = "Connect a phone first"
+            return false
+        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let container = FileManager.default.temporaryDirectory
+            .appendingPathComponent("graft-clip-\(UUID().uuidString)", isDirectory: true)
+        let fileURL = container.appendingPathComponent("Clipboard-\(formatter.string(from: clock())).png")
+        do {
+            try FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
+            try data.write(to: fileURL)
+        } catch {
+            try? FileManager.default.removeItem(at: container)
+            transferFailure = "Could not prepare clipboard image"
+            return false
+        }
+
+        let id = nextTransferId
+        nextTransferId += 1
+        outgoingTempArchives[id] = container
+        do {
+            try coordinator.offer(url: fileURL, transferId: id)
+            syncTransfers()
+            return true
+        } catch {
+            cleanupTempArchive(for: id)
+            transferFailure = "Could not send clipboard image"
+            return false
+        }
+    }
+
+    private func pollClipboard(now: Date) {
+        guard autoShareClipboard, menuState.isConnected, let connection else { return }
+        guard let envelope = clipboard.pollOutgoing(now: now) else { return }
+        try? connection.send(envelope)
         lastSharedClipboard = envelope.payload.objectValue?["body"]?.stringValue
+    }
+
+    private func pollScreenshots() {
+        guard autoSendScreenshots, menuState.isConnected, connection != nil else { return }
+        let screenshots = screenshotWatcher.pollNewScreenshots()
+        guard !screenshots.isEmpty else { return }
+        sendFiles(urls: screenshots)
     }
 
     // MARK: - File transfer
 
     @discardableResult
     func sendFile(url: URL) -> Bool {
-        guard let coordinator = coordinators.all.first, connection != nil else {
+        guard let connection,
+              let coordinator = coordinators.coordinator(for: ObjectIdentifier(connection)) ?? coordinators.all.first else {
             transferFailure = "Connect a phone first"
             return false
         }
         let id = nextTransferId
         nextTransferId += 1
+
+        let sendURL: URL
+        var tempArchiveDir: URL?
+        let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+        if isDirectory {
+            guard let zipped = Self.zipDirectory(url) else {
+                transferFailure = "Could not compress folder \(url.lastPathComponent)"
+                return false
+            }
+            sendURL = zipped.archive
+            tempArchiveDir = zipped.container
+        } else {
+            sendURL = url
+        }
+
         do {
-            try coordinator.offer(url: url, transferId: id)
+            if let tempArchiveDir {
+                outgoingTempArchives[id] = tempArchiveDir
+            }
+            try coordinator.offer(url: sendURL, transferId: id)
             syncTransfers()
             return true
         } catch {
+            if let tempArchiveDir {
+                outgoingTempArchives.removeValue(forKey: id)
+                try? FileManager.default.removeItem(at: tempArchiveDir)
+            }
             transferFailure = "Could not read \(url.lastPathComponent)"
             return false
         }
+    }
+
+    func sendFiles(urls: [URL]) {
+        for url in urls {
+            _ = sendFile(url: url)
+        }
+    }
+
+    func cancelTransfer(id: UInt32) {
+        for coordinator in coordinators.all {
+            coordinator.cancel(transferId: id)
+        }
+        cleanupTempArchive(for: id)
+        syncTransfers()
+    }
+
+    /// Zips a folder into a temporary directory using macOS's native file coordinator.
+    nonisolated static func zipDirectory(_ directory: URL) -> (archive: URL, container: URL)? {
+        let container = FileManager.default.temporaryDirectory
+            .appendingPathComponent("graft-zip-\(UUID().uuidString)", isDirectory: true)
+        let target = container.appendingPathComponent("\(directory.lastPathComponent).zip")
+        var coordError: NSError?
+        var copied = false
+
+        let fileCoordinator = NSFileCoordinator()
+        fileCoordinator.coordinate(readingItemAt: directory, options: .forUploading, error: &coordError) { zipURL in
+            do {
+                try FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
+                try FileManager.default.copyItem(at: zipURL, to: target)
+                copied = true
+            } catch {
+                copied = false
+            }
+        }
+        guard coordError == nil, copied else {
+            try? FileManager.default.removeItem(at: container)
+            return nil
+        }
+        return (archive: target, container: container)
+    }
+
+    private func cleanupTempArchive(for id: UInt32) {
+        if let container = outgoingTempArchives.removeValue(forKey: id) {
+            try? FileManager.default.removeItem(at: container)
+        }
+    }
+
+    private func cleanupAllTempArchives() {
+        for container in outgoingTempArchives.values {
+            try? FileManager.default.removeItem(at: container)
+        }
+        outgoingTempArchives.removeAll()
     }
 
     private func syncTransfers() {
@@ -663,6 +964,7 @@ final class GraftService: ObservableObject {
         }
 
         transfers = merged
+        transferMetrics = speedTracker.update(transfers: merged, now: clock())
         // A success after a failure clears the banner; an error only stands while it is the latest
         // outcome and nothing is in flight.
         if lastTransferSucceeded || !merged.isEmpty {
@@ -674,6 +976,7 @@ final class GraftService: ObservableObject {
 
     /// Records each transfer once per outcome, so a failed retry that later commits updates its row.
     private func recordFinishedTransfers(_ coordinator: TransferCoordinator) {
+        var changed = false
         for id in coordinator.completed.union(coordinator.failures.keys) {
             let failure = coordinator.failures[id]
             let progress = coordinator.progress[id]
@@ -682,14 +985,20 @@ final class GraftService: ObservableObject {
             if recordedOutcomes.keys.contains(key), recordedOutcomes[key]! == failure { continue }
             recordedOutcomes[key] = .some(failure)
             lastTransferSucceeded = failure == nil
+            cleanupTempArchive(for: id)
 
             history.record(
                 id: id,
                 name: name,
                 bytes: progress?.total ?? 0,
                 direction: progress?.direction ?? .receive,
-                failure: failure
+                failure: failure,
+                destinationPath: coordinator.destinations[id]?.path
             )
+            changed = true
+        }
+        if changed {
+            historyStore.save(history.records)
         }
     }
 
@@ -701,6 +1010,7 @@ final class GraftService: ObservableObject {
         case .wrongOffset: return "The transfer got out of sync"
         case .hashMismatch: return "The file did not arrive intact"
         case .diskFull: return "There is not enough space for this file"
+        case .stalled: return "The transfer timed out"
         }
     }
 
@@ -727,23 +1037,24 @@ final class GraftService: ObservableObject {
             .appendingPathComponent("peers.json")
     }
 
-    /// Best-effort local IPv4 address for the pairing URI. The Bonjour path resolves the rest.
+    /// Best-effort local IPv4 address for the pairing URI. Prefers physical LAN interfaces (`en0`,
+    /// `en*`) over VPN/Docker/virtual adapters (`utun*`, `bridge*`, `awdl*`).
     static func localAddress() -> String? {
-        var address: String?
         var interfaces: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&interfaces) == 0, let first = interfaces else { return nil }
         defer { freeifaddrs(interfaces) }
 
+        var candidates: [(name: String, ip: String)] = []
         var pointer = first
         while true {
             let flags = Int32(pointer.pointee.ifa_flags)
             let isUp = (flags & IFF_UP) != 0
             let isLoopback = (flags & IFF_LOOPBACK) != 0
-            if isUp, !isLoopback, pointer.pointee.ifa_addr.pointee.sa_family == UInt8(AF_INET) {
+            if isUp, !isLoopback, let addr = pointer.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET) {
                 var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                 let result = getnameinfo(
-                    pointer.pointee.ifa_addr,
-                    socklen_t(pointer.pointee.ifa_addr.pointee.sa_len),
+                    addr,
+                    socklen_t(addr.pointee.sa_len),
                     &host,
                     socklen_t(host.count),
                     nil,
@@ -751,12 +1062,32 @@ final class GraftService: ObservableObject {
                     NI_NUMERICHOST
                 )
                 if result == 0 {
-                    address = String(cString: host)
+                    let name = String(cString: pointer.pointee.ifa_name)
+                    let ip = String(cString: host)
+                    candidates.append((name: name, ip: ip))
                 }
             }
             guard let next = pointer.pointee.ifa_next else { break }
             pointer = next
         }
-        return address
+        return selectLocalAddress(from: candidates)
+    }
+
+    /// Selects the most likely LAN IPv4 address from active interface candidates.
+    nonisolated static func selectLocalAddress(from candidates: [(name: String, ip: String)]) -> String? {
+        let usable = candidates.filter { !$0.ip.hasPrefix("169.254.") && !$0.ip.hasPrefix("127.") }
+        if let en0 = usable.first(where: { $0.name == "en0" }) {
+            return en0.ip
+        }
+        if let en = usable.first(where: { $0.name.hasPrefix("en") }) {
+            return en.ip
+        }
+        let virtualPrefixes = ["utun", "awdl", "llw", "bridge", "vmenet", "feth", "anpi", "ap", "lo", "gif", "stf"]
+        if let physical = usable.first(where: { candidate in
+            !virtualPrefixes.contains { candidate.name.hasPrefix($0) }
+        }) {
+            return physical.ip
+        }
+        return usable.first?.ip
     }
 }
