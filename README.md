@@ -2,7 +2,7 @@
 
 An open-source tool that connects a Mac and an Android phone over the same Wi-Fi network. Transfer files, share clipboard text, and mirror notifications between the two devices. Nothing leaves the local network.
 
-> **Status:** v0.2.0 is the current release. Download the DMG, APK, or AAB from the
+> **Status:** v0.2.1 is the current release. Download the DMG or APK from the
 > [releases page](https://github.com/jeonjw85/Graft/releases). The macOS build is ad-hoc signed and
 > not notarized, so the first launch needs an explicit approval; see
 > [install instructions](docs/install.md).

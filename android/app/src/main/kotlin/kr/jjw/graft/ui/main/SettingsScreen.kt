@@ -121,7 +121,7 @@ private fun versionName(): String {
     return remember {
         runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "0.2.0"
+        }.getOrNull() ?: "0.2.1"
     }
 }
 
