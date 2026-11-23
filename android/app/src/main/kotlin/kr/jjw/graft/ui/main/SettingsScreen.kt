@@ -3,13 +3,18 @@ package kr.jjw.graft.ui.main
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -19,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import kr.jjw.graft.R
 import kr.jjw.graft.notifications.NotificationAccess
@@ -29,6 +35,7 @@ import kr.jjw.graft.ui.components.RowDivider
 import kr.jjw.graft.ui.components.SectionHeader
 import kr.jjw.graft.ui.components.SettingsGroup
 import kr.jjw.graft.ui.components.SettingsRow
+import kr.jjw.graft.ui.theme.GraftIcons
 import kr.jjw.graft.ui.theme.GraftPalette
 import kr.jjw.graft.ui.theme.GraftSpacing
 
@@ -36,44 +43,75 @@ import kr.jjw.graft.ui.theme.GraftSpacing
  * Preferences, grouped the same way as the connection actions: one card per topic, one row per
  * choice. Nothing here is a bare link floating in space.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(modifier: Modifier = Modifier, onClose: () -> Unit) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = GraftSpacing.l, vertical = GraftSpacing.m),
-        verticalArrangement = Arrangement.spacedBy(GraftSpacing.m),
-    ) {
-        Column {
-            TextButton(onClick = onClose) { Text(stringResource(R.string.action_back)) }
-            Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineSmall)
-        }
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = GraftPalette.background,
+        topBar = {
+            Column {
+                TopAppBar(
+                    title = {
+                        Text(
+                            stringResource(R.string.settings_title),
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onClose) {
+                            Icon(
+                                imageVector = GraftIcons.ArrowBack,
+                                contentDescription = stringResource(R.string.action_back),
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = GraftPalette.background,
+                        titleContentColor = GraftPalette.onSurface,
+                        navigationIconContentColor = GraftPalette.onSurface,
+                    ),
+                )
+                HorizontalDivider(thickness = 1.dp, color = GraftPalette.outline.copy(alpha = 0.65f))
+            }
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = GraftSpacing.l, vertical = GraftSpacing.l),
+            verticalArrangement = Arrangement.spacedBy(GraftSpacing.m),
+        ) {
+            SectionHeader(stringResource(R.string.settings_section_background))
+            SettingsGroup { BatteryRow() }
 
-        SectionHeader(stringResource(R.string.settings_section_background))
-        SettingsGroup { BatteryRow() }
+            SectionHeader(stringResource(R.string.settings_section_clipboard))
+            SettingsGroup { ClipboardRow() }
 
-        SectionHeader(stringResource(R.string.settings_section_clipboard))
-        SettingsGroup { ClipboardRow() }
+            SectionHeader(stringResource(R.string.settings_section_notifications))
+            SettingsGroup { NotificationAccessRow() }
 
-        SectionHeader(stringResource(R.string.settings_section_notifications))
-        SettingsGroup { NotificationAccessRow() }
+            SectionHeader(stringResource(R.string.settings_section_about))
+            SettingsGroup {
+                SettingsRow(
+                    label = "Graft ${versionName()}",
+                    supporting = stringResource(R.string.settings_about_desc),
+                    onClick = {},
+                    showChevron = false,
+                    icon = GraftIcons.Info,
+                    iconTint = GraftPalette.primary,
+                )
+            }
 
-        SectionHeader(stringResource(R.string.settings_section_about))
-        SettingsGroup {
-            SettingsRow(
-                label = "Graft ${versionName()}",
-                supporting = stringResource(R.string.settings_about_desc),
-                onClick = {},
-                showChevron = false,
+            Text(
+                stringResource(R.string.settings_privacy_footer),
+                style = MaterialTheme.typography.bodySmall,
+                color = GraftPalette.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = GraftSpacing.xs, vertical = GraftSpacing.xs),
             )
         }
-
-        Text(
-            stringResource(R.string.settings_privacy_footer),
-            style = MaterialTheme.typography.bodySmall,
-            color = GraftPalette.onSurfaceVariant,
-        )
     }
 }
 
@@ -83,7 +121,7 @@ private fun versionName(): String {
     return remember {
         runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "0.1.3"
+        }.getOrNull() ?: "0.2.0"
     }
 }
 
@@ -120,6 +158,8 @@ private fun BatteryRow() {
             }
         },
         showChevron = needed,
+        icon = GraftIcons.Battery,
+        iconTint = if (needed) GraftPalette.warning else GraftPalette.connected,
     )
 }
 
@@ -144,6 +184,7 @@ private fun ClipboardRow() {
             }
         },
         showChevron = false,
+        icon = GraftIcons.Copy,
     )
     RowDivider()
     SettingsRow(
@@ -158,6 +199,7 @@ private fun ClipboardRow() {
             ConnectionService.sendClipboard(text)
         },
         showChevron = false,
+        icon = GraftIcons.Clipboard,
     )
 }
 
@@ -184,5 +226,7 @@ private fun NotificationAccessRow() {
         },
         onClick = { NotificationAccess.openSettings(context) },
         showChevron = !granted,
+        icon = GraftIcons.Alerts,
+        iconTint = if (granted) GraftPalette.connected else GraftPalette.warning,
     )
 }

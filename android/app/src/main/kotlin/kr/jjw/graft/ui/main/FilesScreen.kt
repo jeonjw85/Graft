@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,10 +16,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
@@ -35,8 +40,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -52,6 +60,7 @@ import kr.jjw.graft.service.TransferRecord
 import kr.jjw.graft.ui.components.EmptyState
 import kr.jjw.graft.ui.components.SectionHeader
 import kr.jjw.graft.ui.components.SettingsGroup
+import kr.jjw.graft.ui.theme.GraftIcons
 import kr.jjw.graft.ui.theme.GraftPalette
 import kr.jjw.graft.ui.theme.GraftSpacing
 
@@ -239,20 +248,37 @@ fun FilesScreen(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = GraftSpacing.l),
-            verticalArrangement = Arrangement.spacedBy(GraftSpacing.s),
+            verticalArrangement = Arrangement.spacedBy(GraftSpacing.m),
             contentPadding = PaddingValues(
                 top = GraftSpacing.xl,
                 bottom = GraftSpacing.xl,
             ),
         ) {
             item {
-                Text(stringResource(R.string.files_title), style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    stringResource(R.string.files_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = GraftPalette.onSurface,
+                )
             }
             item {
                 Button(
                     onClick = { pickFiles.launch(arrayOf("*/*")) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = GraftPalette.primary,
+                        contentColor = GraftPalette.onPrimary,
+                    ),
                 ) {
+                    Icon(
+                        imageVector = GraftIcons.Upload,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(GraftSpacing.s))
                     Text(stringResource(R.string.action_send_file_to_mac))
                 }
             }
@@ -279,17 +305,26 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                             horizontalArrangement = Arrangement.spacedBy(GraftSpacing.m),
                         ) {
                             FileTile(label = FilesScreenRules.badgeFor(active.progress.name))
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(GraftSpacing.xs),
+                            ) {
                                 Text(
                                     active.progress.name,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                    color = GraftPalette.onSurface,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
-                                Spacer(Modifier.height(GraftSpacing.xs))
                                 LinearProgressIndicator(
                                     progress = { active.progress.fraction.toFloat().coerceIn(0f, 1f) },
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = GraftPalette.primary,
+                                    trackColor = GraftPalette.surfaceVariant,
+                                    strokeCap = StrokeCap.Round,
                                 )
                                 Text(
                                     if (active.progress.total == 0L) {
@@ -303,9 +338,16 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                                     color = GraftPalette.onSurfaceVariant,
                                 )
                             }
-                            TextButton(
+                            IconButton(
                                 onClick = { ConnectionService.cancelTransfer(active.id) }
-                            ) { Text(stringResource(R.string.action_cancel)) }
+                            ) {
+                                Icon(
+                                    imageVector = GraftIcons.Close,
+                                    contentDescription = stringResource(R.string.action_cancel),
+                                    tint = GraftPalette.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -313,7 +355,12 @@ fun FilesScreen(modifier: Modifier = Modifier) {
 
             item { SectionHeader(stringResource(R.string.files_recent)) }
             if (screen.recent.isEmpty()) {
-                item { EmptyState(stringResource(R.string.files_empty)) }
+                item {
+                    EmptyState(
+                        text = stringResource(R.string.files_empty),
+                        icon = GraftIcons.Files,
+                    )
+                }
             } else {
                 items(screen.recent, key = { it.id.toString() }) { record ->
                     val openable = FilesScreenRules.canOpen(record.destination)
@@ -327,10 +374,14 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                             horizontalArrangement = Arrangement.spacedBy(GraftSpacing.m),
                         ) {
                             FileTile(label = FilesScreenRules.badgeFor(record.name))
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
                                 Text(
                                     record.name,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                    color = GraftPalette.onSurface,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -367,7 +418,9 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                                             }
                                         }
                                     }
-                                ) { Text(stringResource(R.string.action_open)) }
+                                ) {
+                                    Text(stringResource(R.string.action_open))
+                                }
                             }
                         }
                     }
@@ -386,13 +439,14 @@ fun FilesScreen(modifier: Modifier = Modifier) {
 private fun FileTile(label: String) {
     Box(
         modifier = Modifier
-            .size(40.dp)
-            .background(GraftPalette.surface, RoundedCornerShape(10.dp)),
+            .size(42.dp)
+            .background(GraftPalette.surfaceVariant, RoundedCornerShape(10.dp))
+            .border(1.dp, GraftPalette.outline, RoundedCornerShape(10.dp)),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
             color = GraftPalette.primary,
         )
     }

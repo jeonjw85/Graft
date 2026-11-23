@@ -1,6 +1,8 @@
 package kr.jjw.graft.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,10 +34,18 @@ fun StatusCard(
     modifier: Modifier = Modifier,
     error: String? = null,
 ) {
+    val accent = GraftPalette.colorFor(tone)
+    val borderColor = if (tone == StatusTone.Neutral) {
+        GraftPalette.outline
+    } else {
+        accent.copy(alpha = 0.35f)
+    }
+
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = GraftPalette.surfaceVariant,
-        shape = RoundedCornerShape(12.dp),
+        color = GraftPalette.surface,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, borderColor),
     ) {
         Row(
             modifier = Modifier.padding(GraftSpacing.l),
@@ -47,7 +57,11 @@ fun StatusCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(GraftSpacing.xs),
             ) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = GraftPalette.onSurface,
+                )
                 detail?.let {
                     Text(
                         it,
@@ -74,8 +88,9 @@ private fun ToneBadge(tone: StatusTone) {
     val color = GraftPalette.colorFor(tone)
     Box(
         modifier = Modifier
-            .size(40.dp)
-            .background(color.copy(alpha = 0.16f), CircleShape),
+            .size(44.dp)
+            .background(color.copy(alpha = 0.14f), CircleShape)
+            .border(1.dp, color.copy(alpha = 0.28f), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Icon(

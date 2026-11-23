@@ -3,9 +3,12 @@ package kr.jjw.graft.ui.main
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -138,14 +142,18 @@ fun AlertsScreen(modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = GraftSpacing.l),
-        verticalArrangement = Arrangement.spacedBy(GraftSpacing.s),
+        verticalArrangement = Arrangement.spacedBy(GraftSpacing.m),
         contentPadding = PaddingValues(
             top = GraftSpacing.xl,
             bottom = GraftSpacing.xl,
         ),
     ) {
         item {
-            Text(stringResource(R.string.alerts_title), style = MaterialTheme.typography.headlineSmall)
+            Text(
+                stringResource(R.string.alerts_title),
+                style = MaterialTheme.typography.headlineSmall,
+                color = GraftPalette.onSurface,
+            )
         }
         item {
             AccessCard(
@@ -173,6 +181,8 @@ fun AlertsScreen(modifier: Modifier = Modifier) {
                         label = stringResource(R.string.alerts_add_apps),
                         supporting = stringResource(R.string.alerts_add_apps_desc),
                         onClick = { picking = true },
+                        icon = GraftIcons.Add,
+                        iconTint = GraftPalette.primary,
                     )
                 }
             }
@@ -180,7 +190,12 @@ fun AlertsScreen(modifier: Modifier = Modifier) {
 
         item { SectionHeader(stringResource(R.string.alerts_recent)) }
         if (state.recent.isEmpty()) {
-            item { EmptyState(stringResource(R.string.alerts_empty)) }
+            item {
+                EmptyState(
+                    text = stringResource(R.string.alerts_empty),
+                    icon = GraftIcons.Alerts,
+                )
+            }
         } else {
             item {
                 SettingsGroup {
@@ -209,7 +224,11 @@ private fun AppPickerDialog(
     }
 
     Dialog(onDismissRequest = onDismiss) {
-        Surface(color = GraftPalette.surface, shape = RoundedCornerShape(16.dp)) {
+        Surface(
+            color = GraftPalette.surface,
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, GraftPalette.outline),
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -223,6 +242,7 @@ private fun AppPickerDialog(
                     onValueChange = { query = it },
                     label = { Text(stringResource(R.string.action_search)) },
                     singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.size(GraftSpacing.s))
@@ -246,7 +266,12 @@ private fun AppPickerDialog(
                         }
                     }
                 }
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_done)) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_done)) }
+                }
             }
         }
     }
@@ -255,10 +280,12 @@ private fun AppPickerDialog(
 /** One card that says whether forwarding is on, instead of a paragraph plus a large button. */
 @Composable
 private fun AccessCard(granted: Boolean, onOpenSettings: () -> Unit) {
+    val accent = if (granted) GraftPalette.connected else GraftPalette.warning
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = GraftPalette.surfaceVariant,
-        shape = RoundedCornerShape(12.dp),
+        color = GraftPalette.surface,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.35f)),
         onClick = onOpenSettings,
     ) {
         Row(
@@ -266,12 +293,20 @@ private fun AccessCard(granted: Boolean, onOpenSettings: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(GraftSpacing.m),
         ) {
-            Icon(
-                imageVector = GraftIcons.Alerts,
-                contentDescription = null,
-                tint = if (granted) GraftPalette.connected else GraftPalette.warning,
-                modifier = Modifier.size(24.dp),
-            )
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(accent.copy(alpha = 0.14f), CircleShape)
+                    .border(1.dp, accent.copy(alpha = 0.28f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = GraftIcons.Alerts,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     if (granted) {
@@ -279,7 +314,8 @@ private fun AccessCard(granted: Boolean, onOpenSettings: () -> Unit) {
                     } else {
                         stringResource(R.string.alerts_access_off)
                     },
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = GraftPalette.onSurface,
                 )
                 Text(
                     if (granted) {
@@ -291,7 +327,12 @@ private fun AccessCard(granted: Boolean, onOpenSettings: () -> Unit) {
                     color = GraftPalette.onSurfaceVariant,
                 )
             }
-            Text("›", style = MaterialTheme.typography.titleMedium, color = GraftPalette.onSurfaceVariant)
+            Icon(
+                imageVector = GraftIcons.ChevronRight,
+                contentDescription = null,
+                tint = GraftPalette.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }

@@ -3,10 +3,13 @@ package kr.jjw.graft.ui.theme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /** How a status should read, independent of the colour that represents it. */
 enum class StatusTone {
@@ -68,6 +71,28 @@ object GraftSpacing {
 
 @Composable
 fun GraftTheme(content: @Composable () -> Unit) {
+    val base = Typography()
+    val typography = base.copy(
+        headlineSmall = base.headlineSmall.copy(
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.25).sp,
+        ),
+        titleLarge = base.titleLarge.copy(
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.15).sp,
+        ),
+        titleMedium = base.titleMedium.copy(
+            fontWeight = FontWeight.SemiBold,
+        ),
+        labelLarge = base.labelLarge.copy(
+            fontWeight = FontWeight.SemiBold,
+        ),
+        labelMedium = base.labelMedium.copy(
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.4.sp,
+        ),
+    )
+
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = GraftPalette.primary,
@@ -90,11 +115,12 @@ fun GraftTheme(content: @Composable () -> Unit) {
             inverseOnSurface = GraftPalette.inverseOnSurface,
             onError = GraftPalette.onPrimary,
         ),
+        typography = typography,
         shapes = Shapes(
-            extraSmall = RoundedCornerShape(6.dp),
-            small = RoundedCornerShape(8.dp),
-            medium = RoundedCornerShape(12.dp),
-            large = RoundedCornerShape(16.dp),
+            extraSmall = RoundedCornerShape(8.dp),
+            small = RoundedCornerShape(10.dp),
+            medium = RoundedCornerShape(14.dp),
+            large = RoundedCornerShape(18.dp),
         ),
         content = content,
     )

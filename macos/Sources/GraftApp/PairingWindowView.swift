@@ -97,16 +97,21 @@ struct PairingWindowView: View {
     }
 
     private func qr(_ image: NSImage) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             Text("Scan with your phone")
-                .font(.headline)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Palette.onSurface)
             Image(nsImage: image)
                 .interpolation(.none)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 260, height: 260)
-                .background(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .frame(width: 248, height: 248)
+                .padding(12)
+                .background(.white, in: RoundedRectangle(cornerRadius: 16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(Palette.outline, lineWidth: 1)
+                )
             Text("Open Graft on the phone and point it at this code.")
                 .font(.callout)
                 .foregroundStyle(Palette.onSurfaceVariant)
@@ -115,27 +120,50 @@ struct PairingWindowView: View {
     }
 
     private func manualValues(_ manual: PairingService.NumericPairing) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("Type these on your phone")
-                .font(.headline)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Palette.onSurface)
 
-            row(
-                label: "Code",
-                value: PairingViewState(fallbackCode: manual.code).displayCode,
-                monospaced: true,
-                size: 24
+            VStack(alignment: .leading, spacing: 12) {
+                row(
+                    label: "Code",
+                    value: PairingViewState(fallbackCode: manual.code).displayCode,
+                    monospaced: true,
+                    size: 26
+                )
+                Rectangle()
+                    .fill(Palette.outline.opacity(0.65))
+                    .frame(height: 1)
+                row(label: "Fingerprint", value: manual.fingerprintPrefix, monospaced: true, size: 15)
+                Rectangle()
+                    .fill(Palette.outline.opacity(0.65))
+                    .frame(height: 1)
+                row(label: "Address", value: "\(manual.host):\(manual.port)", monospaced: true, size: 15)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.surface, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Palette.outline, lineWidth: 1)
             )
-            row(label: "Fingerprint", value: manual.fingerprintPrefix, monospaced: true, size: 15)
-            row(label: "Address", value: "\(manual.host):\(manual.port)", monospaced: true, size: 15)
 
-            Button("Copy details") {
+            Button {
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
                 pasteboard.setString(
                     "\(manual.code)\n\(manual.fingerprintPrefix)\n\(manual.host):\(manual.port)",
                     forType: .string
                 )
+            } label: {
+                Label("Copy details", systemImage: "doc.on.doc")
+                    .font(.callout.weight(.medium))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
             }
+            .buttonStyle(.borderedProminent)
+            .tint(Palette.primary)
 
             Text("The fingerprint must match what the phone shows before it trusts this Mac.")
                 .font(.caption)
@@ -146,12 +174,13 @@ struct PairingWindowView: View {
     }
 
     private func row(label: LocalizedStringKey, value: String, monospaced: Bool, size: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(label)
-                .font(.caption)
+                .font(.caption.weight(.medium))
                 .foregroundStyle(Palette.onSurfaceVariant)
             Text(value)
-                .font(monospaced ? .system(size: size, design: .monospaced) : .system(size: size))
+                .font(monospaced ? .system(size: size, weight: .semibold, design: .monospaced) : .system(size: size))
+                .foregroundStyle(Palette.onSurface)
                 .textSelection(.enabled)
         }
     }

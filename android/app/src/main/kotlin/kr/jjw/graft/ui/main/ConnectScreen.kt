@@ -1,14 +1,27 @@
 package kr.jjw.graft.ui.main
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -16,9 +29,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import kr.jjw.graft.R
 import kr.jjw.graft.service.ConnectionRepository
 import kr.jjw.graft.service.ConnectionService
@@ -29,6 +47,7 @@ import kr.jjw.graft.ui.components.SettingsGroup
 import kr.jjw.graft.ui.components.SettingsRow
 import kr.jjw.graft.ui.components.StatusCard
 import kr.jjw.graft.ui.onboarding.PairingDialog
+import kr.jjw.graft.ui.theme.GraftIcons
 import kr.jjw.graft.ui.theme.GraftPalette
 import kr.jjw.graft.ui.theme.GraftSpacing
 import kr.jjw.graft.ui.theme.StatusTone
@@ -77,6 +96,11 @@ fun ConnectScreen(
     var clipboardFeedback by remember { mutableStateOf<String?>(null) }
     val visual = visualFor(state)
     val connected = state.status is ConnectionStatus.Connected
+    val clipboard = remember(context) {
+        context.getSystemService(android.content.ClipboardManager::class.java)
+    }
+    val sentMessage = stringResource(R.string.clipboard_sent_to_mac)
+
     val localizedStatusTitle = when (val status = state.status) {
         is ConnectionStatus.Connected -> stringResource(
             R.string.status_connected,
@@ -99,7 +123,26 @@ fun ConnectScreen(
             .padding(horizontal = GraftSpacing.l, vertical = GraftSpacing.xl),
         verticalArrangement = Arrangement.spacedBy(GraftSpacing.l),
     ) {
-        Text(stringResource(R.string.connection_title), style = MaterialTheme.typography.headlineSmall)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                stringResource(R.string.connection_title),
+                style = MaterialTheme.typography.headlineSmall,
+                color = GraftPalette.onSurface,
+            )
+            if (paired) {
+                IconButton(onClick = onOpenSettings) {
+                    Icon(
+                        imageVector = GraftIcons.Settings,
+                        contentDescription = stringResource(R.string.action_settings),
+                        tint = GraftPalette.onSurfaceVariant,
+                    )
+                }
+            }
+        }
 
         StatusCard(
             title = localizedStatusTitle,
@@ -108,18 +151,95 @@ fun ConnectScreen(
             error = visual.error,
         )
 
-        // One clear primary action per state; everything else is grouped below.
-        if (paired) {
-            Button(
-                onClick = { if (connected) onSendFile() else ConnectionService.start(context) },
+        // Two-column quick action tiles when connected; single primary CTA otherwise.
+        if (paired && connected) {
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(GraftSpacing.m),
             ) {
-                Text(
-                    if (connected) {
-                        stringResource(R.string.action_send_file_to_mac)
-                    } else {
-                        stringResource(R.string.action_reconnect)
-                    }
+                QuickActionTile(
+                    label = stringResource(R.string.action_send_file_to_mac),
+                    icon = GraftIcons.Upload,
+                    accent = GraftPalette.primary,
+                    emphasized = true,
+                    onClick = onSendFile,
+                    modifier = Modifier.weight(1f),
+                )
+                QuickActionTile(
+                    label = stringResource(R.string.action_send_clipboard),
+                    supporting = clipboardFeedback
+                        ?: state.lastSentClipboard?.let {
+                            stringResource(R.string.clipboard_last_sent, it.take(24))
+                        },
+                    icon = GraftIcons.Clipboard,
+                    accent = GraftPalette.onSurface,
+                    emphasized = false,
+                    onClick = {
+                        val text = clipboard?.primaryClip
+                            ?.takeIf { it.itemCount > 0 }
+                            ?.getItemAt(0)
+                            ?.coerceToText(context)
+                            ?.toString()
+                        clipboardFeedback = ConnectionService.sendClipboard(text) ?: sentMessage
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        } else if (paired) {
+            Button(
+                onClick = { ConnectionService.start(context) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = GraftPalette.primary,
+                    contentColor = GraftPalette.onPrimary,
+                ),
+            ) {
+                Icon(
+                    imageVector = GraftIcons.Sync,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(GraftSpacing.s))
+                Text(stringResource(R.string.action_reconnect))
+            }
+        } else {
+            Button(
+                onClick = { pairingOpen = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = GraftPalette.primary,
+                    contentColor = GraftPalette.onPrimary,
+                ),
+            ) {
+                Icon(
+                    imageVector = GraftIcons.QrCode,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(GraftSpacing.s))
+                Text(stringResource(R.string.action_pair_mac))
+            }
+        }
+
+        if (state.lastClipboard != null) {
+            SettingsGroup {
+                SettingsRow(
+                    label = stringResource(R.string.action_copy_last_clipboard),
+                    supporting = state.lastClipboard?.take(60),
+                    onClick = {
+                        clipboard?.setPrimaryClip(
+                            android.content.ClipData.newPlainText("Graft", state.lastClipboard)
+                        )
+                    },
+                    showChevron = false,
+                    icon = GraftIcons.Copy,
+                    iconTint = GraftPalette.primary,
                 )
             }
         }
@@ -133,6 +253,7 @@ fun ConnectScreen(
                         if (paired) ConnectionService.stop(context)
                         pairingOpen = true
                     },
+                    icon = GraftIcons.QrCode,
                 )
                 // A retry loop that cannot be stopped is a trap; offer the exit in both states.
                 if (state.status !is ConnectionStatus.Idle) {
@@ -150,6 +271,7 @@ fun ConnectScreen(
                         },
                         onClick = { ConnectionService.stop(context) },
                         showChevron = false,
+                        icon = GraftIcons.Power,
                     )
                 }
                 RowDivider()
@@ -157,6 +279,7 @@ fun ConnectScreen(
                     label = stringResource(R.string.action_settings),
                     supporting = stringResource(R.string.action_settings_desc),
                     onClick = onOpenSettings,
+                    icon = GraftIcons.Settings,
                 )
                 RowDivider()
                 SettingsRow(
@@ -168,50 +291,8 @@ fun ConnectScreen(
                         onForget()
                     },
                     showChevron = false,
+                    icon = GraftIcons.Delete,
                 )
-            }
-        } else {
-            Button(onClick = { pairingOpen = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.action_pair_mac))
-            }
-        }
-
-        if (connected || state.lastClipboard != null) {
-            val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
-            val sentMessage = stringResource(R.string.clipboard_sent_to_mac)
-            SettingsGroup {
-                if (connected) {
-                    SettingsRow(
-                        label = stringResource(R.string.action_send_clipboard),
-                        supporting = clipboardFeedback
-                            ?: state.lastSentClipboard?.let {
-                                stringResource(R.string.clipboard_last_sent, it.take(40))
-                            }
-                            ?: stringResource(R.string.action_send_clipboard_desc),
-                        onClick = {
-                            val text = clipboard?.primaryClip
-                                ?.takeIf { it.itemCount > 0 }
-                                ?.getItemAt(0)
-                                ?.coerceToText(context)
-                                ?.toString()
-                            clipboardFeedback = ConnectionService.sendClipboard(text) ?: sentMessage
-                        },
-                        showChevron = false,
-                    )
-                }
-                if (state.lastClipboard != null) {
-                    if (connected) RowDivider()
-                    SettingsRow(
-                        label = stringResource(R.string.action_copy_last_clipboard),
-                        supporting = state.lastClipboard?.take(60),
-                        onClick = {
-                            clipboard?.setPrimaryClip(
-                                android.content.ClipData.newPlainText("Graft", state.lastClipboard)
-                            )
-                        },
-                        showChevron = false,
-                    )
-                }
             }
         }
 
@@ -219,6 +300,7 @@ fun ConnectScreen(
             stringResource(R.string.privacy_lan_footer),
             style = MaterialTheme.typography.bodySmall,
             color = GraftPalette.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = GraftSpacing.xs),
         )
 
         if (pairingOpen) {
@@ -228,6 +310,66 @@ fun ConnectScreen(
                     if (paired) ConnectionService.start(context)
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun QuickActionTile(
+    label: String,
+    icon: ImageVector,
+    accent: Color,
+    emphasized: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    supporting: String? = null,
+) {
+    val container = if (emphasized) GraftPalette.secondaryContainer else GraftPalette.surface
+    val border = if (emphasized) GraftPalette.primary.copy(alpha = 0.45f) else GraftPalette.outline
+    val badgeBg = if (emphasized) GraftPalette.primary.copy(alpha = 0.2f) else GraftPalette.surfaceVariant
+
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        color = container,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, border),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(GraftSpacing.l),
+            verticalArrangement = Arrangement.spacedBy(GraftSpacing.s),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(badgeBg, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                color = GraftPalette.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (supporting != null) {
+                Text(
+                    supporting,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = GraftPalette.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

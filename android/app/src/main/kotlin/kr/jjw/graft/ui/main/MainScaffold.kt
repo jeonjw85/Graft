@@ -1,10 +1,13 @@
 package kr.jjw.graft.ui.main
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,8 +19,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import kr.jjw.graft.R
 import kr.jjw.graft.ui.theme.GraftIcons
+import kr.jjw.graft.ui.theme.GraftPalette
 
 /** The three jobs of the app: the link, the files, the alerts. */
 enum class AppTab(val label: String, val labelRes: Int, val icon: ImageVector) {
@@ -63,16 +68,30 @@ fun MainScaffold(
     }
 
     Scaffold(
+        containerColor = GraftPalette.background,
         bottomBar = {
-            NavigationBar {
-                AppTab.entries.forEach { entry ->
-                    val title = stringResource(entry.labelRes)
-                    NavigationBarItem(
-                        selected = tab == entry,
-                        onClick = { tab = entry },
-                        icon = { Icon(entry.icon, contentDescription = title) },
-                        label = { Text(title) },
-                    )
+            Column {
+                HorizontalDivider(thickness = 1.dp, color = GraftPalette.outline)
+                NavigationBar(
+                    containerColor = GraftPalette.surface,
+                    tonalElevation = 0.dp,
+                ) {
+                    AppTab.entries.forEach { entry ->
+                        val title = stringResource(entry.labelRes)
+                        NavigationBarItem(
+                            selected = tab == entry,
+                            onClick = { tab = entry },
+                            icon = { Icon(entry.icon, contentDescription = title) },
+                            label = { Text(title) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = GraftPalette.primary,
+                                selectedTextColor = GraftPalette.onSurface,
+                                indicatorColor = GraftPalette.secondaryContainer,
+                                unselectedIconColor = GraftPalette.onSurfaceVariant,
+                                unselectedTextColor = GraftPalette.onSurfaceVariant,
+                            ),
+                        )
+                    }
                 }
             }
         },

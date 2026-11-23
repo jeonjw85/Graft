@@ -17,7 +17,7 @@ struct MenuContent: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Color.clear
                 .frame(height: 0)
                 .onAppear { GraftLauncher.shared.startIfNeeded() }
@@ -32,44 +32,59 @@ struct MenuContent: View {
                 pairingActions
             } else if service.menuState.status == .pairing {
                 // A window is already open; starting again would invalidate the code on screen.
-                HStack {
+                HStack(spacing: 8) {
+                    Image(systemName: "qrcode")
+                        .font(.caption)
+                        .foregroundStyle(Palette.warning)
                     Text("Pairing window is open")
                         .font(.caption)
                         .foregroundStyle(Palette.onSurfaceVariant)
                     Spacer()
                     Button("Show window") { showPairingWindow() }
                         .buttonStyle(.link)
+                        .font(.caption.weight(.medium))
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(Palette.warning.opacity(0.35), lineWidth: 1)
+                )
             }
 
             peerList
 
             if service.menuState.isConnected || !service.transfers.isEmpty {
-                Divider()
                 actions
             }
 
-            Divider()
+            Rectangle()
+                .fill(Palette.outline.opacity(0.7))
+                .frame(height: 1)
+                .padding(.top, 2)
+
             footer
         }
-        .padding(16)
-        .frame(width: 320)
+        .padding(14)
+        .frame(width: 332)
         .background(Palette.background)
         .overlay {
             if isDropTargeted && service.menuState.isConnected {
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(Palette.primary, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
-                    .background(Palette.background.opacity(0.92), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Palette.background.opacity(0.94), in: RoundedRectangle(cornerRadius: 12))
                     .overlay {
-                        VStack(spacing: 6) {
-                            Image(systemName: "arrow.up.doc")
-                                .font(.title2)
+                        VStack(spacing: 8) {
+                            Image(systemName: "arrow.up.doc.fill")
+                                .font(.system(size: 26))
                                 .foregroundStyle(Palette.primary)
                             Text("Drop files or folders to send")
-                                .font(.callout.weight(.medium))
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(Palette.onSurface)
                         }
                     }
-                    .padding(6)
+                    .padding(8)
             }
         }
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
@@ -93,48 +108,81 @@ struct MenuContent: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(Palette.color(for: Palette.tone(for: service.menuState.status)))
-                    .frame(width: 8, height: 8)
+        let tone = Palette.tone(for: service.menuState.status)
+        let accent = Palette.color(for: tone)
+        let borderColor = tone == .neutral ? Palette.outline : accent.opacity(0.35)
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(accent.opacity(0.18))
+                        .frame(width: 22, height: 22)
+                    Circle()
+                        .fill(accent)
+                        .frame(width: 8, height: 8)
+                }
+
                 Text(localizedTitle)
-                    .font(.headline)
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(Palette.onSurface)
                     .fixedSize(horizontal: false, vertical: true)
+
                 Spacer(minLength: 4)
+
                 if service.menuState.isConnected, let status = service.peerStatus {
-                    HStack(spacing: 3) {
+                    HStack(spacing: 4) {
                         Image(systemName: status.batterySymbol)
-                            .foregroundStyle(status.battery <= 20 && !status.charging ? Palette.warning : Palette.onSurfaceVariant)
+                            .font(.system(size: 11))
+                            .foregroundStyle(
+                                status.battery <= 20 && !status.charging
+                                    ? Palette.warning
+                                    : (status.charging ? Palette.connected : Palette.onSurfaceVariant)
+                            )
                         Text("\(status.battery)%")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(Palette.onSurfaceVariant)
+                            .font(.caption2.weight(.medium).monospacedDigit())
+                            .foregroundStyle(Palette.onSurface)
                     }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Palette.surfaceVariant, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Palette.outline, lineWidth: 1))
                     .accessibilityLabel("Phone battery \(status.battery) percent\(status.charging ? ", charging" : "")")
                 }
             }
-            summary.detail.map {
-                Text(LocalizedStringKey($0))
+
+            if let detail = summary.detail {
+                Text(LocalizedStringKey(detail))
                     .font(.caption)
                     .foregroundStyle(Palette.onSurfaceVariant)
                     .textSelection(.enabled)
+                    .padding(.leading, 32)
             }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(borderColor, lineWidth: 1)
+        )
+    }
 
+    /// Healing actions for a failed start: a retry (port freed) and the privacy pane (local network).
+    private var errorActions: some View {
+        HStack(spacing: 8) {
+            PopoverPrimaryButton(title: "Try again", systemImage: "arrow.clockwise") {
+                service.restart()
+            }
+            PopoverFooterButton(title: "Privacy Settings", systemImage: "lock.shield") {
+                service.openLocalNetworkSettings()
+            }
         }
     }
 
     /// Pairing starts with the QR code; the typed values live inside the window.
-    /// Healing actions for a failed start: a retry (port freed) and the privacy pane (local network).
-    private var errorActions: some View {
-        HStack(spacing: 8) {
-            Button("Try again") { service.restart() }
-            Button("Privacy Settings") { service.openLocalNetworkSettings() }
-                .buttonStyle(.link)
-        }
-    }
-
     private var pairingActions: some View {
-        Button("Pair a phone") {
+        PopoverPrimaryButton(title: "Pair a phone", systemImage: "qrcode") {
             service.beginPairing()
             showPairingWindow()
         }
@@ -142,30 +190,57 @@ struct MenuContent: View {
 
     private var actions: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Button("Send files…") { chooseFiles() }
-                    .disabled(!service.menuState.isConnected)
-                Spacer()
-                Button("Send clipboard") { service.sendClipboard() }
-                    .disabled(!service.menuState.isConnected)
-            }
+            HStack(spacing: 8) {
+                PopoverActionTile(
+                    title: "Send files…",
+                    systemImage: "arrow.up.doc.fill",
+                    accent: Palette.primary,
+                    emphasized: true,
+                    disabled: !service.menuState.isConnected
+                ) {
+                    chooseFiles()
+                }
 
-            if service.menuState.isConnected {
-                Button {
-                    service.toggleRingPeer()
-                } label: {
-                    Label(
-                        service.isRingingPeer ? "Stop ringing" : "Ring phone",
-                        systemImage: service.isRingingPeer ? "bell.slash" : "bell.and.waves.left.and.right"
-                    )
-                    .frame(maxWidth: .infinity)
+                PopoverActionTile(
+                    title: "Send clipboard",
+                    systemImage: "doc.on.clipboard",
+                    accent: Palette.onSurface,
+                    emphasized: false,
+                    disabled: !service.menuState.isConnected
+                ) {
+                    service.sendClipboard()
+                }
+
+                if service.menuState.isConnected {
+                    PopoverActionTile(
+                        title: service.isRingingPeer ? "Stop ringing" : "Ring phone",
+                        systemImage: service.isRingingPeer ? "bell.slash.fill" : "bell.and.waves.left.and.right",
+                        accent: service.isRingingPeer ? Palette.warning : Palette.onSurface,
+                        emphasized: service.isRingingPeer,
+                        disabled: false
+                    ) {
+                        service.toggleRingPeer()
+                    }
                 }
             }
 
             if service.menuState.isConnected && service.transfers.isEmpty {
-                Text("Tip: drop files or folders here to send.")
-                    .font(.caption2)
-                    .foregroundStyle(Palette.onSurfaceVariant)
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.down.doc")
+                        .font(.caption2)
+                        .foregroundStyle(Palette.onSurfaceVariant.opacity(0.85))
+                    Text("Tip: drop files or folders here to send.")
+                        .font(.caption2)
+                        .foregroundStyle(Palette.onSurfaceVariant)
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Palette.surface.opacity(0.7), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Palette.outline.opacity(0.85), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                )
             }
 
             let summary = TransferSummary.from(
@@ -174,15 +249,19 @@ struct MenuContent: View {
                 failure: service.transferFailure
             )
             ForEach(summary.rows, id: \.id) { row in
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
-                        Text(row.progress.name)
+                        Image(systemName: row.progress.direction == .send ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                             .font(.caption)
+                            .foregroundStyle(Palette.primary)
+                        Text(row.progress.name)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Palette.onSurface)
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer()
                         Text("\(percent(row.progress))%")
-                            .font(.caption.monospacedDigit())
+                            .font(.caption2.weight(.medium).monospacedDigit())
                             .foregroundStyle(Palette.onSurfaceVariant)
                         Button {
                             service.cancelTransfer(id: row.id)
@@ -194,20 +273,48 @@ struct MenuContent: View {
                         .help("Cancel transfer")
                         .accessibilityLabel("Cancel \(row.progress.name)")
                     }
-                    ProgressView(value: min(max(row.progress.fraction, 0), 1))
-                        .controlSize(.small)
+                    GeometryReader { geo in
+                        let fraction = CGFloat(min(max(row.progress.fraction, 0), 1))
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Palette.surfaceVariant)
+                            Capsule()
+                                .fill(Palette.primary)
+                                .frame(width: max(4, geo.size.width * fraction))
+                        }
+                    }
+                    .frame(height: 5)
                     if let metric = service.transferMetrics[row.id] {
                         Text(metric.label)
                             .font(.caption2.monospacedDigit())
                             .foregroundStyle(Palette.onSurfaceVariant)
                     }
                 }
+                .padding(10)
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(Palette.outline, lineWidth: 1)
+                )
             }
 
             if let failure = service.transferFailure {
-                Text(LocalizedStringKey(failure))
-                    .font(.caption)
-                    .foregroundStyle(Palette.error)
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(Palette.error)
+                    Text(LocalizedStringKey(failure))
+                        .font(.caption)
+                        .foregroundStyle(Palette.error)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Palette.error.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Palette.error.opacity(0.3), lineWidth: 1)
+                )
             }
         }
     }
@@ -215,27 +322,63 @@ struct MenuContent: View {
     private var peerList: some View {
         VStack(alignment: .leading, spacing: 6) {
             if service.peers.isEmpty {
-                Text("No paired phones yet.")
-                    .font(.caption)
-                    .foregroundStyle(Palette.onSurfaceVariant)
+                HStack(spacing: 8) {
+                    Image(systemName: "iphone.slash")
+                        .font(.caption)
+                        .foregroundStyle(Palette.onSurfaceVariant)
+                    Text("No paired phones yet.")
+                        .font(.caption)
+                        .foregroundStyle(Palette.onSurfaceVariant)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(Palette.outline, lineWidth: 1)
+                )
             } else {
-                ForEach(service.peers, id: \.fingerprint) { peer in
-                    HStack {
-                        Text(peer.name)
-                            .font(.callout)
-                        Spacer()
-                        Menu {
-                            Button("Forget", role: .destructive) {
-                                service.forgetPeer(fingerprint: peer.fingerprint)
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis")
+                VStack(spacing: 0) {
+                    ForEach(Array(service.peers.enumerated()), id: \.element.fingerprint) { index, peer in
+                        if index > 0 {
+                            Rectangle()
+                                .fill(Palette.outline.opacity(0.65))
+                                .frame(height: 1)
+                                .padding(.horizontal, 10)
                         }
-                        .menuStyle(.borderlessButton)
-                        .fixedSize()
-                        .accessibilityLabel("Actions for \(peer.name)")
+                        HStack(spacing: 8) {
+                            Image(systemName: "iphone")
+                                .font(.caption)
+                                .foregroundStyle(Palette.onSurfaceVariant)
+                            Text(peer.name)
+                                .font(.callout.weight(.medium))
+                                .foregroundStyle(Palette.onSurface)
+                                .lineLimit(1)
+                            Spacer()
+                            Menu {
+                                Button("Forget", role: .destructive) {
+                                    service.forgetPeer(fingerprint: peer.fingerprint)
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .foregroundStyle(Palette.onSurfaceVariant)
+                                    .frame(width: 24, height: 22)
+                                    .contentShape(Rectangle())
+                            }
+                            .menuStyle(.borderlessButton)
+                            .fixedSize()
+                            .accessibilityLabel("Actions for \(peer.name)")
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                     }
                 }
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(Palette.outline, lineWidth: 1)
+                )
             }
         }
     }
@@ -245,12 +388,19 @@ struct MenuContent: View {
             if #available(macOS 14, *) {
                 // `showSettingsWindow:` stopped working on newer macOS; SettingsLink is the
                 // supported way and is a button in the popover.
-                SettingsLink { Text("Settings…") }
+                SettingsLink {
+                    PopoverFooterLabel(title: "Settings…", systemImage: "gearshape")
+                }
+                .buttonStyle(.plain)
             } else {
-                Button("Settings…") { openSettings() }
+                PopoverFooterButton(title: "Settings…", systemImage: "gearshape") {
+                    openSettings()
+                }
             }
             Spacer()
-            Button("Quit") { NSApplication.shared.terminate(nil) }
+            PopoverFooterButton(title: "Quit", systemImage: "power") {
+                NSApplication.shared.terminate(nil)
+            }
         }
     }
 
@@ -302,5 +452,120 @@ struct MenuContent: View {
     private func showPairingWindow() {
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "pairing")
+    }
+}
+
+/// Square quick-action tile with icon, label, and subtle hover feedback.
+private struct PopoverActionTile: View {
+    let title: LocalizedStringKey
+    let systemImage: String
+    let accent: Color
+    let emphasized: Bool
+    let disabled: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        let fill: Color = {
+            if emphasized {
+                return accent.opacity(isHovered && !disabled ? 0.24 : 0.16)
+            }
+            return isHovered && !disabled ? Palette.surfaceVariant : Palette.surface
+        }()
+        let border = emphasized ? accent.opacity(0.45) : (isHovered && !disabled ? Palette.outline.opacity(1.2) : Palette.outline)
+
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(disabled ? Palette.onSurfaceVariant.opacity(0.45) : accent)
+                    .frame(height: 18)
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(disabled ? Palette.onSurfaceVariant.opacity(0.5) : Palette.onSurface)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 6)
+            .background(fill, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(border, lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .onHover { isHovered = $0 }
+    }
+}
+
+/// Full-width primary action pill for pairing or recovery actions.
+private struct PopoverPrimaryButton: View {
+    let title: LocalizedStringKey
+    let systemImage: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 12.5, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12.5, weight: .semibold))
+            }
+            .foregroundStyle(Color(red: 11 / 255, green: 16 / 255, blue: 32 / 255))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(
+                Palette.primary.opacity(isHovered ? 0.92 : 1.0),
+                in: RoundedRectangle(cornerRadius: 10)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+private struct PopoverFooterLabel: View {
+    let title: LocalizedStringKey
+    let systemImage: String
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11.5))
+            Text(title)
+                .font(.caption.weight(.medium))
+        }
+        .foregroundStyle(isHovered ? Palette.onSurface : Palette.onSurfaceVariant)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            isHovered ? Palette.surfaceVariant : Color.clear,
+            in: RoundedRectangle(cornerRadius: 7)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 7))
+        .onHover { isHovered = $0 }
+    }
+}
+
+private struct PopoverFooterButton: View {
+    let title: LocalizedStringKey
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            PopoverFooterLabel(title: title, systemImage: systemImage)
+        }
+        .buttonStyle(.plain)
     }
 }
