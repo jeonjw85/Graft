@@ -39,9 +39,23 @@ MediaStore insert, the file is kept in app storage and the row says so.
 
 ## Installation
 
+### macOS (Homebrew — Apple Silicon)
+
+```bash
+brew install --cask jeonjw85/tap/graft
+```
+
+To upgrade later:
+
+```bash
+brew upgrade --cask graft
+```
+
+### Direct download (macOS & Android)
+
 Download the latest build from the [releases page](https://github.com/jeonjw85/Graft/releases):
 `Graft-<version>.dmg` for macOS, `Graft-<version>.apk` for Android. `SHA256SUMS` sits beside them.
-[`docs/install.md`](docs/install.md) has the first-launch steps for the unsigned Mac build.
+[`docs/install.md`](docs/install.md) has the first-launch steps for the ad-hoc signed Mac build.
 
 To build from source instead:
 
@@ -85,10 +99,12 @@ docs/       Protocol specification, permissions, threat model, roadmap
 
 ## Documentation
 
+- [Install guide](docs/install.md)
 - [Protocol specification](docs/protocol.md)
 - [Roadmap](docs/roadmap.md)
 - [Permissions](docs/permissions.md)
 - [Threat model](docs/threat-model.md)
+- [Testing guide](docs/testing.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## License

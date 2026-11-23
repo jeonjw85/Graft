@@ -1,13 +1,13 @@
 # Testing
 
-> Status: growing with each milestone. Transport and pairing are covered automatically; file transfer, clipboard, and notifications are still manual.
+> Status: protocol fixtures (21), TLS transport, pairing, 5 MiB end-to-end file transfer, and both app unit test suites run automatically in CI. Large-file resume (1 GB) and real-device continuity checks are listed in the manual checklist below.
 
 ## Automated tests
 
 ```bash
-./protocol/tools/validate.sh          # protocol fixtures, schema, and identity vectors
-swift test --package-path macos       # Swift protocol and transport core
-cd android && ./gradlew :core:test    # Kotlin protocol and transport core
+./protocol/tools/validate.sh                    # protocol fixtures (21), schema, and identity vectors
+swift test --package-path macos                 # Swift protocol (67) and macOS core (125) tests
+cd android && ./gradlew test                    # Kotlin core and Android app unit tests
 ```
 
 Both core suites read the same fixtures in `protocol/fixtures/`. If only one side passes, wire compatibility is broken.

@@ -13,7 +13,8 @@ the phone only.
 | Platform | Permission | Why it is needed | If denied |
 |---|---|---|---|
 | macOS | Local network | Device discovery (Bonjour) and connections | Devices are not discovered; manual IP entry still works |
-| macOS | Notifications | Show Android alerts as banners | Alerts are queued in the app's recent list but nothing appears; the app offers a shortcut to System Settings |
+| macOS | Notifications | Show Android alerts as banners (with inline reply) | Alerts are queued in the app's recent list but nothing appears; the app offers a shortcut to System Settings |
+| macOS | Files / Desktop folder (opt-in only) | Watch for new macOS screenshots only when **Send new Mac screenshots automatically** is enabled | Feature stays off by default; Graft never touches Desktop unless opted in |
 | Android | Notification access | Forward phone notifications to the Mac | Only the notification feature is disabled; the app says so in its notification screen |
 | Android | Camera | Scan the pairing QR code | Pair with the code, fingerprint prefix, and IP instead; the app switches to the manual form automatically |
 | Android | Notifications (Android 13+) | Show connection state and incoming notifications | Connection state is only visible inside the app |
@@ -34,7 +35,7 @@ fix and where:
 |---|---|
 | Camera | Pairing still works with the typed code, fingerprint, and IP. After the system stops asking, the scan step says the camera is blocked and offers **Open settings**. |
 | Notification access (Android) | Alerts tab shows the state and a button to the system notification-access screen; nothing else changes. |
-| Battery optimisation (Android) | Connection tab shows a **Background** card explaining that Android may stop the link, with **Open battery settings**. |
+| Battery optimisation (Android) | Settings → Background shows whether Graft is exempt and opens **Battery optimisation settings** when needed. |
 | App notifications (Android 13+) | Connection tab warns that the connection notification is hidden, with **Open notification settings**. |
 | Notifications (macOS) | Settings > Notifications shows the state and opens the system pane. |
 | Local network (macOS) | A failed start shows the error plus **Try again** and **Privacy Settings**. |

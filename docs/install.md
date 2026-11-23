@@ -12,19 +12,36 @@ Graft runs on a Mac and an Android phone on the same Wi-Fi network. Nothing leav
 
 ## macOS
 
+### Option A: Homebrew (Apple Silicon, recommended)
+
+```bash
+brew install --cask jeonjw85/tap/graft
+```
+
+To upgrade later:
+
+```bash
+brew upgrade --cask graft
+```
+
+### Option B: Manual DMG download
+
 1. Download `Graft-<version>.dmg` from
    [the releases page](https://github.com/jeonjw85/Graft/releases), and check it against
    `SHA256SUMS` (`shasum -a 256 -c SHA256SUMS`).
 2. Open the image and drag **Graft** into **Applications**.
-3. The build is **not notarized** (no Apple Developer ID), so macOS blocks the first launch.
+
+### First launch (macOS)
+
+1. The build is **ad-hoc signed and not notarized** (no Apple Developer ID), so macOS blocks the first launch.
    - **macOS 15 and later:** double-click Graft, choose **Done** in the dialog, then open
      **System Settings → Privacy & Security**, scroll down, click **Open Anyway**, authenticate,
      and confirm **Open**. Right-click → Open no longer overrides this.
    - **macOS 13–14:** right-click **Graft** in Applications and choose **Open**, then **Open** again.
    - Terminal alternative: `xattr -dr com.apple.quarantine /Applications/Graft.app`
-4. Graft has no Dock icon; it appears in the menu bar. Allow **Local Network** access when asked,
+2. Graft has no Dock icon; it appears in the menu bar. Allow **Local Network** access when asked,
    otherwise pairing and reconnecting cannot work.
-5. Allow notifications if you want phone alerts to appear on the Mac.
+3. Allow notifications if you want phone alerts to appear on the Mac.
 
 ## Android
 
@@ -35,8 +52,8 @@ Graft runs on a Mac and an Android phone on the same Wi-Fi network. Nothing leav
 2. Allow installing unknown apps for the browser or file manager you downloaded with.
 3. Open Graft and follow onboarding: notification access is optional, camera access enables QR
    scanning but typed values work without it.
-4. For a reliable background connection, open **Connection → Background** and allow Graft to run
-   without battery optimisation.
+4. For a reliable background connection, open **Connection → Settings → Background** and allow Graft
+   to run without battery optimisation.
 
 ## Pair
 
@@ -49,6 +66,8 @@ Graft runs on a Mac and an Android phone on the same Wi-Fi network. Nothing leav
 ## Uninstall
 
 - Android: uninstall the app. Received files stay in `Download/Graft`.
-- macOS: quit from the popover and move the app to the Trash, then delete
-  `~/Library/Application Support/Graft` and the **Graft** item in Keychain Access. The app has no
-  uninstaller, and moving it to the Trash leaves the peer pin and the device identity behind.
+- macOS (Homebrew): quit from the popover, run `brew uninstall --cask --zap graft`, and delete the
+  **Graft** item in Keychain Access if you want to remove the device identity as well.
+- macOS (manual): quit from the popover and move the app to the Trash, then delete
+  `~/Library/Application Support/Graft`, `~/Library/Preferences/kr.jjw.graft.mac.plist`, and the
+  **Graft** item in Keychain Access.
