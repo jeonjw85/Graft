@@ -28,8 +28,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
+import kr.jjw.graft.R
 import kr.jjw.graft.notifications.NotificationAccess
 import kr.jjw.graft.ui.OnboardingStep
 import kr.jjw.graft.ui.OnboardingViewModel
@@ -71,7 +73,9 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                 title = { Text(OnboardingProgress.label(state.step)) },
                 actions = {
                     if (state.step != OnboardingStep.Scan) {
-                        TextButton(onClick = { refresh { viewModel.advance() } }) { Text("Skip") }
+                        TextButton(onClick = { refresh { viewModel.advance() } }) {
+                            Text(stringResource(R.string.action_skip))
+                        }
                     }
                 },
             )
@@ -86,8 +90,8 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                         modifier = Modifier.padding(bottom = GraftSpacing.s),
                     )
                 }
-                val primary = primaryActionLabel(state.step)
-                if (primary != null) {
+                val primaryRes = primaryActionLabelRes(state.step)
+                if (primaryRes != null) {
                     Button(
                         onClick = {
                             when (state.step) {
@@ -104,7 +108,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(primary)
+                        Text(stringResource(primaryRes))
                     }
                 }
             }
@@ -136,18 +140,18 @@ fun OnboardingFlow(onFinished: () -> Unit) {
     }
 }
 
-private fun primaryActionLabel(step: OnboardingStep): String? = when (step) {
-    OnboardingStep.Welcome -> "Get started"
-    OnboardingStep.Permissions -> "Continue"
+private fun primaryActionLabelRes(step: OnboardingStep): Int? = when (step) {
+    OnboardingStep.Welcome -> R.string.action_get_started
+    OnboardingStep.Permissions -> R.string.action_continue
     OnboardingStep.Scan, OnboardingStep.Done -> null
 }
 
 @Composable
 private fun WelcomeStep() {
     Spacer(Modifier.height(GraftSpacing.xl))
-    Text("Graft", style = MaterialTheme.typography.headlineMedium)
+    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium)
     Text(
-        "Connect this phone to your Mac over the same Wi-Fi. No account, no cloud.",
+        stringResource(R.string.onboarding_welcome_desc),
         style = MaterialTheme.typography.bodyLarge,
         color = GraftPalette.onSurfaceVariant,
     )
@@ -174,20 +178,19 @@ private fun PermissionsStep(context: android.content.Context) {
     }
 
     Spacer(Modifier.height(GraftSpacing.s))
-    Text("Notifications", style = MaterialTheme.typography.titleMedium)
+    Text(stringResource(R.string.settings_section_notifications), style = MaterialTheme.typography.titleMedium)
     Text(
         if (granted) {
-            "Notification access is on. Pick which apps to forward later in the Alerts tab."
+            stringResource(R.string.onboarding_notifications_granted)
         } else {
-            "Grant notification access to show phone alerts on your Mac. Everything else works " +
-                "without it."
+            stringResource(R.string.onboarding_notifications_prompt)
         },
         style = MaterialTheme.typography.bodyMedium,
         color = GraftPalette.onSurfaceVariant,
     )
     if (!granted) {
         Button(onClick = { NotificationAccess.openSettings(context) }) {
-            Text("Open notification access")
+            Text(stringResource(R.string.action_open_notification_access))
         }
     }
 
@@ -195,14 +198,14 @@ private fun PermissionsStep(context: android.content.Context) {
     // link invisible. Ask here, where the user is already granting permissions.
     if (!canPost) {
         Spacer(Modifier.height(GraftSpacing.s))
-        Text("Background notice", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.onboarding_background_notice), style = MaterialTheme.typography.titleMedium)
         Text(
-            "Allow notifications so the ongoing connection notice can be shown.",
+            stringResource(R.string.onboarding_background_notice_desc),
             style = MaterialTheme.typography.bodyMedium,
             color = GraftPalette.onSurfaceVariant,
         )
         Button(onClick = { askPostNotifications.launch(Manifest.permission.POST_NOTIFICATIONS) }) {
-            Text("Allow notifications")
+            Text(stringResource(R.string.action_allow_notifications))
         }
     }
 }

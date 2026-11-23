@@ -84,6 +84,7 @@ class TransferHistory(
             TransferFailureKind.UNPAIRED_PEER -> "Not paired"
             TransferFailureKind.DUPLICATE_TRANSFER -> "Already in progress"
             TransferFailureKind.UNSAFE_NAME -> "Name not allowed"
+            TransferFailureKind.STALLED -> "Timed out"
         }
     }
 }

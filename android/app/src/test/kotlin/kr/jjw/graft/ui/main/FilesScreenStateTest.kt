@@ -124,7 +124,7 @@ class FilesScreenStateTest {
     fun `sizes use binary units`() {
         assertEquals("0 B", FilesScreenRules.formatSize(0))
         assertEquals("999 B", FilesScreenRules.formatSize(999))
-        assertEquals("1.0 KB", FilesScreenRules.formatSize(1024))
+        assertEquals("1.0 KiB", FilesScreenRules.formatSize(1024))
         assertEquals("5.0 MiB", FilesScreenRules.formatSize(5L * 1024 * 1024))
         assertEquals("1.5 GiB", FilesScreenRules.formatSize((1.5 * 1024 * 1024 * 1024).toLong()))
     }
@@ -144,7 +144,7 @@ class FilesScreenStateTest {
     fun `an app storage row says so`() {
         val row = record(1u, destination = "/data/a.txt")
         assertEquals(
-            "Received  ·  1.0 KB  ·  just now  ·  Saved to app storage",
+            "Received  ·  1.0 KiB  ·  just now  ·  Saved to app storage",
             FilesScreenRules.detail(row, nowMillis = row.finishedAtMillis),
         )
     }
@@ -153,7 +153,7 @@ class FilesScreenStateTest {
     fun `a downloads row names the direction and size`() {
         val row = record(1u)
         assertEquals(
-            "Received  ·  1.0 KB  ·  just now",
+            "Received  ·  1.0 KiB  ·  just now",
             FilesScreenRules.detail(row, nowMillis = row.finishedAtMillis),
         )
     }
@@ -162,8 +162,23 @@ class FilesScreenStateTest {
     fun `a failed row leads with the reason`() {
         val row = record(1u, reason = TransferFailureKind.HASH_MISMATCH)
         assertEquals(
-            "Hash mismatch  ·  Received  ·  1.0 KB  ·  just now",
+            "Hash mismatch  ·  Received  ·  1.0 KiB  ·  just now",
             FilesScreenRules.detail(row, nowMillis = row.finishedAtMillis),
         )
+    }
+
+    @Test
+    fun `speed tracker computes throughput and ETA`() {
+        val tracker = TransferSpeedTracker()
+        val total = 20L * 1024 * 1024
+        val start = listOf(ActiveTransfer(1u, TransferProgress("video.mp4", 0, total, TransferDirection.send)))
+        assertTrue(tracker.update(start, nowMillis = 1_000L).isEmpty())
+
+        val moved = listOf(ActiveTransfer(1u, TransferProgress("video.mp4", 4L * 1024 * 1024, total, TransferDirection.send)))
+        val metric = tracker.update(moved, nowMillis = 3_000L)[1u]
+
+        assertEquals("2.0 MiB/s  ·  8s left", metric?.label)
+        assertEquals("< 1s left", TransferMetrics.formatEta(0.4))
+        assertEquals("2m 5s left", TransferMetrics.formatEta(125.0))
     }
 }

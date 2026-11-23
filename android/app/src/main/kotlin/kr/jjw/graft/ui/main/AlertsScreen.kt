@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -49,6 +50,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kr.jjw.graft.R
 import kr.jjw.graft.notifications.NotificationAccess
 import kr.jjw.graft.notifications.NotificationAllowList
 import kr.jjw.graft.notifications.PostedNotification
@@ -143,7 +145,7 @@ fun AlertsScreen(modifier: Modifier = Modifier) {
         ),
     ) {
         item {
-            Text("Alerts", style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.alerts_title), style = MaterialTheme.typography.headlineSmall)
         }
         item {
             AccessCard(
@@ -153,7 +155,7 @@ fun AlertsScreen(modifier: Modifier = Modifier) {
         }
 
         if (state.accessGranted) {
-            item { SectionHeader("Forward these apps") }
+            item { SectionHeader(stringResource(R.string.alerts_forward_apps)) }
             val chosen = AlertsScreenRules.chosenRows(allowed, installed)
             item {
                 SettingsGroup {
@@ -168,17 +170,17 @@ fun AlertsScreen(modifier: Modifier = Modifier) {
                     }
                     if (chosen.isNotEmpty()) RowDivider()
                     SettingsRow(
-                        label = "Add apps",
-                        supporting = "Choose which apps may forward alerts",
+                        label = stringResource(R.string.alerts_add_apps),
+                        supporting = stringResource(R.string.alerts_add_apps_desc),
                         onClick = { picking = true },
                     )
                 }
             }
         }
 
-        item { SectionHeader("Recent") }
+        item { SectionHeader(stringResource(R.string.alerts_recent)) }
         if (state.recent.isEmpty()) {
-            item { EmptyState("Nothing forwarded yet.") }
+            item { EmptyState(stringResource(R.string.alerts_empty)) }
         } else {
             item {
                 SettingsGroup {
@@ -214,18 +216,24 @@ private fun AppPickerDialog(
                     .heightIn(max = 620.dp)
                     .padding(GraftSpacing.l),
             ) {
-                Text("Forward these apps", style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.alerts_forward_apps), style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.size(GraftSpacing.s))
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    label = { Text("Search") },
+                    label = { Text(stringResource(R.string.action_search)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.size(GraftSpacing.s))
                 if (visible.isEmpty()) {
-                    EmptyState(if (installed.isEmpty()) "Loading apps…" else "No apps match that search.")
+                    EmptyState(
+                        if (installed.isEmpty()) {
+                            stringResource(R.string.alerts_loading_apps)
+                        } else {
+                            stringResource(R.string.alerts_no_match)
+                        }
+                    )
                 } else {
                     LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
                         items(visible, key = { it.first }) { (pkg, label) ->
@@ -238,7 +246,7 @@ private fun AppPickerDialog(
                         }
                     }
                 }
-                TextButton(onClick = onDismiss) { Text("Done") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_done)) }
             }
         }
     }
@@ -266,14 +274,18 @@ private fun AccessCard(granted: Boolean, onOpenSettings: () -> Unit) {
             )
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    if (granted) "Notification access allowed" else "Notification access is off",
+                    if (granted) {
+                        stringResource(R.string.alerts_access_allowed)
+                    } else {
+                        stringResource(R.string.alerts_access_off)
+                    },
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
                     if (granted) {
-                        "Choose which apps to forward."
+                        stringResource(R.string.alerts_access_allowed_desc)
                     } else {
-                        "Tap to allow, then choose apps here."
+                        stringResource(R.string.alerts_access_off_desc)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = GraftPalette.onSurfaceVariant,

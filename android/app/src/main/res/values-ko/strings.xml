@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Graft</string>
+
+    <!-- Tabs -->
+    <string name="tab_connection">연결</string>
+    <string name="tab_files">파일</string>
+    <string name="tab_alerts">알림</string>
+
+    <!-- Connection screen -->
+    <string name="connection_title">연결</string>
+    <string name="status_connected">%1$s에 연결됨</string>
+    <string name="status_connected_detail">파일, 클립보드, 알림을 주고받을 준비가 되었습니다.</string>
+    <string name="status_connecting">연결 중…</string>
+    <string name="status_connecting_detail">같은 Wi-Fi에서 Mac을 찾는 중입니다.</string>
+    <string name="status_not_connected">연결되지 않음</string>
+    <string name="status_idle_detail">Mac에서 Graft 앱을 열어 연결하세요.</string>
+    <string name="action_send_file_to_mac">Mac으로 파일 보내기</string>
+    <string name="action_reconnect">다시 연결</string>
+    <string name="action_pair_another_mac">다른 Mac 연결</string>
+    <string name="action_pair_another_mac_desc">현재 연결을 새 Mac으로 교체합니다</string>
+    <string name="action_disconnect">연결 끊기</string>
+    <string name="action_disconnect_desc">다시 연결할 때까지 연결을 중지합니다</string>
+    <string name="action_stop_trying">재연결 중지</string>
+    <string name="action_stop_trying_desc">다시 연결을 누를 때까지 재시도를 멈춥니다</string>
+    <string name="action_settings">설정</string>
+    <string name="action_settings_desc">백그라운드, 클립보드, 알림, 정보</string>
+    <string name="action_forget_mac">이 Mac 연결 해제</string>
+    <string name="action_forget_mac_desc">페어링 정보와 전송 기록을 삭제합니다</string>
+    <string name="action_pair_mac">Mac 연결하기</string>
+    <string name="action_send_clipboard">Mac으로 클립보드 보내기</string>
+    <string name="action_send_clipboard_desc">현재 휴대폰 클립보드의 텍스트를 Mac으로 보냅니다</string>
+    <string name="clipboard_last_sent">최근 보낸 항목: %1$s</string>
+    <string name="clipboard_sent_to_mac">Mac으로 보냈습니다</string>
+    <string name="action_copy_last_clipboard">최근 받은 클립보드 복사</string>
+    <string name="privacy_lan_footer">모든 데이터는 로컬 Wi-Fi 안에서만 전송됩니다. 계정이나 클라우드가 필요 없습니다.</string>
+
+    <!-- Files screen -->
+    <string name="files_title">파일</string>
+    <string name="files_in_progress">전송 중</string>
+    <string name="files_finishing">마무리 중…</string>
+    <string name="action_cancel">취소</string>
+    <string name="files_recent">최근 전송</string>
+    <string name="files_empty">아직 전송된 파일이 없습니다. 주고받은 파일이 여기에 표시됩니다.</string>
+    <string name="action_open">열기</string>
+    <string name="files_no_app_can_open">이 파일을 열 수 있는 앱이 없습니다</string>
+
+    <!-- Alerts screen -->
+    <string name="alerts_title">알림</string>
+    <string name="alerts_access_allowed">알림 접근 허용됨</string>
+    <string name="alerts_access_allowed_desc">Mac으로 전달할 앱을 선택하세요.</string>
+    <string name="alerts_access_off">알림 접근이 꺼져 있음</string>
+    <string name="alerts_access_off_desc">탭하여 권한을 허용한 뒤 앱을 선택하세요.</string>
+    <string name="alerts_forward_apps">알림을 전달할 앱</string>
+    <string name="alerts_add_apps">앱 추가</string>
+    <string name="alerts_add_apps_desc">알림을 전달할 앱을 선택합니다</string>
+    <string name="alerts_recent">최근 알림</string>
+    <string name="alerts_empty">아직 전달된 알림이 없습니다.</string>
+    <string name="action_search">검색</string>
+    <string name="alerts_loading_apps">앱 목록 불러오는 중…</string>
+    <string name="alerts_no_match">검색 결과가 없습니다.</string>
+    <string name="action_done">완료</string>
+
+    <!-- Settings screen -->
+    <string name="action_back">‹ 뒤로</string>
+    <string name="settings_title">설정</string>
+    <string name="settings_section_background">백그라운드</string>
+    <string name="settings_section_clipboard">클립보드</string>
+    <string name="settings_section_notifications">알림</string>
+    <string name="settings_section_about">정보</string>
+    <string name="settings_about_desc">프로토콜 1 · 로컬 네트워크 전용 · TLS 1.3 인증서 피닝</string>
+    <string name="settings_privacy_footer">Graft는 파일, 클립보드, 알림을 외부 서버로 전송하지 않습니다.</string>
+    <string name="settings_battery_allow">백그라운드 실행 허용</string>
+    <string name="settings_battery_allow_desc">배터리 절약으로 연결이 끊길 수 있습니다. 탭하여 허용하세요.</string>
+    <string name="settings_battery_allowed">백그라운드 실행 허용됨</string>
+    <string name="settings_battery_allowed_desc">배터리 최적화로 연결이 중단되지 않습니다.</string>
+    <string name="clipboard_copied">클립보드에 복사됨</string>
+    <string name="clipboard_copy_last_received">최근 받은 항목 복사</string>
+    <string name="clipboard_nothing_received">아직 받은 항목이 없습니다.</string>
+    <string name="settings_notifications_allow">알림 접근 허용</string>
+    <string name="settings_notifications_allow_desc">휴대폰 알림을 Mac에 표시하려면 필요합니다.</string>
+    <string name="settings_notifications_allowed_desc">알림 탭에서 전달할 앱을 선택하세요.</string>
+
+    <!-- Onboarding & pairing -->
+    <string name="action_skip">건너뛰기</string>
+    <string name="action_get_started">시작하기</string>
+    <string name="action_continue">계속</string>
+    <string name="onboarding_welcome_desc">같은 Wi-Fi의 Mac과 휴대폰을 바로 연결합니다. 계정이나 클라우드가 필요 없습니다.</string>
+    <string name="onboarding_notifications_granted">알림 접근이 켜져 있습니다. 알림 탭에서 전달할 앱을 선택할 수 있습니다.</string>
+    <string name="onboarding_notifications_prompt">휴대폰 알림을 Mac에 표시하려면 알림 접근 권한이 필요합니다. 허용하지 않아도 다른 기능은 모두 동작합니다.</string>
+    <string name="action_open_notification_access">알림 접근 설정 열기</string>
+    <string name="onboarding_background_notice">연결 상태 알림</string>
+    <string name="onboarding_background_notice_desc">백그라운드 연결 상태를 표시하려면 알림 권한을 허용하세요.</string>
+    <string name="action_allow_notifications">알림 허용</string>
+    <string name="pairing_scan_instruction">Mac 메뉴 막대의 Graft QR 코드를 스캔하거나 아래 값을 직접 입력하세요.</string>
+    <string name="pairing_dialog_title">Mac 연결</string>
+    <string name="action_close">닫기</string>
+    <string name="pairing_manual_title">카메라 없이 연결</string>
+    <string name="pairing_manual_desc">Mac 메뉴 막대 창에 표시된 세 가지 값을 입력하세요.</string>
+    <string name="pairing_field_code">6자리 코드</string>
+    <string name="pairing_field_fingerprint">지문 (8자리)</string>
+    <string name="pairing_field_host">Mac IP 주소</string>
+    <string name="pairing_field_port">포트</string>
+    <string name="action_pair">연결</string>
+
+    <!-- Quick Settings, notifications & ringer -->
+    <string name="tile_send_clipboard">클립보드 보내기</string>
+    <string name="tile_subtitle_not_paired">연결 안 됨</string>
+    <string name="tile_subtitle_connected">연결됨</string>
+    <string name="tile_subtitle_tap">탭하여 보내기</string>
+    <string name="toast_pair_first">먼저 Mac과 연결하세요</string>
+    <string name="toast_no_clipboard_text">클립보드에 텍스트가 없습니다</string>
+    <string name="toast_clipboard_sent">Mac으로 클립보드를 보냈습니다</string>
+    <string name="toast_clipboard_sending">Mac으로 클립보드 전송 중…</string>
+    <string name="ring_channel_name">내 폰 찾기</string>
+    <string name="ring_channel_desc">Mac에서 휴대폰 벨을 울릴 때 표시됩니다</string>
+    <string name="ring_title">내 폰 찾는 중</string>
+    <string name="ring_text">Mac에서 벨을 울리고 있습니다. 탭하여 중지하세요.</string>
+    <string name="action_stop_ringing">벨소리 중지</string>
+</resources>

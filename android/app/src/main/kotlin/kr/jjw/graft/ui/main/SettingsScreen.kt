@@ -11,7 +11,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,11 +18,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.Lifecycle
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kr.jjw.graft.clipboard.ClipboardAutoCopy
+import kr.jjw.graft.R
 import kr.jjw.graft.notifications.NotificationAccess
 import kr.jjw.graft.service.ConnectionRepository
 import kr.jjw.graft.service.ConnectionService
@@ -49,31 +46,31 @@ fun SettingsScreen(modifier: Modifier = Modifier, onClose: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(GraftSpacing.m),
     ) {
         Column {
-            TextButton(onClick = onClose) { Text("‹ Back") }
-            Text("Settings", style = MaterialTheme.typography.headlineSmall)
+            TextButton(onClick = onClose) { Text(stringResource(R.string.action_back)) }
+            Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineSmall)
         }
 
-        SectionHeader("Background")
+        SectionHeader(stringResource(R.string.settings_section_background))
         SettingsGroup { BatteryRow() }
 
-        SectionHeader("Clipboard")
+        SectionHeader(stringResource(R.string.settings_section_clipboard))
         SettingsGroup { ClipboardRow() }
 
-        SectionHeader("Notifications")
+        SectionHeader(stringResource(R.string.settings_section_notifications))
         SettingsGroup { NotificationAccessRow() }
 
-        SectionHeader("About")
+        SectionHeader(stringResource(R.string.settings_section_about))
         SettingsGroup {
             SettingsRow(
                 label = "Graft ${versionName()}",
-                supporting = "Protocol 1 · LAN only · TLS 1.3 with pinned certificates",
+                supporting = stringResource(R.string.settings_about_desc),
                 onClick = {},
                 showChevron = false,
             )
         }
 
         Text(
-            "Graft never sends your files, clipboard, or notifications to a server.",
+            stringResource(R.string.settings_privacy_footer),
             style = MaterialTheme.typography.bodySmall,
             color = GraftPalette.onSurfaceVariant,
         )
@@ -105,11 +102,15 @@ private fun BatteryRow() {
 
     val needed = PermissionGuidance.shouldSuggestBatterySettings(exempt = exempt, paired = true)
     SettingsRow(
-        label = if (needed) "Allow background running" else "Background running allowed",
-        supporting = if (needed) {
-            "Android may stop the link to save power. Tap to allow."
+        label = if (needed) {
+            stringResource(R.string.settings_battery_allow)
         } else {
-            "Android will not stop the link to save power."
+            stringResource(R.string.settings_battery_allowed)
+        },
+        supporting = if (needed) {
+            stringResource(R.string.settings_battery_allow_desc)
+        } else {
+            stringResource(R.string.settings_battery_allowed_desc)
         },
         onClick = {
             if (needed) {
@@ -127,31 +128,18 @@ private fun ClipboardRow() {
     val context = LocalContext.current
     val state by ConnectionRepository.state.collectAsState()
     val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
-    val autoCopy = remember { ClipboardAutoCopy() }
-    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow
-        .collectAsStateWithLifecycle()
-    var copied by remember { mutableStateOf(false) }
-
-    LaunchedEffect(state.lastClipboard, state.lastClipboardAt, lifecycleState) {
-        val text = state.lastClipboard ?: return@LaunchedEffect
-        val shouldCopy = autoCopy.shouldCopy(
-            text = text,
-            arrivedAtMillis = state.lastClipboardAt,
-            hasFocus = lifecycleState.isAtLeast(Lifecycle.State.RESUMED),
-            nowMillis = System.currentTimeMillis(),
-        )
-        if (shouldCopy) {
-            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Graft", text))
-            copied = true
-        }
-    }
+    var copied by remember(state.lastClipboardAt) { mutableStateOf(false) }
 
     SettingsRow(
-        label = if (copied) "Copied to clipboard" else "Copy last received",
-        supporting = state.lastClipboard?.take(80) ?: "Nothing received yet.",
+        label = if (copied) {
+            stringResource(R.string.clipboard_copied)
+        } else {
+            stringResource(R.string.clipboard_copy_last_received)
+        },
+        supporting = state.lastClipboard?.take(80) ?: stringResource(R.string.clipboard_nothing_received),
         onClick = {
             state.lastClipboard?.let {
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Graft", it))
+                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Graft", it))
                 copied = true
             }
         },
@@ -159,10 +147,10 @@ private fun ClipboardRow() {
     )
     RowDivider()
     SettingsRow(
-        label = "Send clipboard to Mac",
-        supporting = state.lastSentClipboard?.let { "Last sent: ${it.take(40)}" },
+        label = stringResource(R.string.action_send_clipboard),
+        supporting = state.lastSentClipboard?.let { stringResource(R.string.clipboard_last_sent, it.take(40)) },
         onClick = {
-            val text = clipboard.primaryClip
+            val text = clipboard?.primaryClip
                 ?.takeIf { it.itemCount > 0 }
                 ?.getItemAt(0)
                 ?.coerceToText(context)
@@ -184,11 +172,15 @@ private fun NotificationAccessRow() {
     }
 
     SettingsRow(
-        label = if (granted) "Notification access allowed" else "Allow notification access",
-        supporting = if (granted) {
-            "Tick apps on the Alerts tab to forward their notifications."
+        label = if (granted) {
+            stringResource(R.string.alerts_access_allowed)
         } else {
-            "Needed to show phone alerts on your Mac."
+            stringResource(R.string.settings_notifications_allow)
+        },
+        supporting = if (granted) {
+            stringResource(R.string.settings_notifications_allowed_desc)
+        } else {
+            stringResource(R.string.settings_notifications_allow_desc)
         },
         onClick = { NotificationAccess.openSettings(context) },
         showChevron = !granted,

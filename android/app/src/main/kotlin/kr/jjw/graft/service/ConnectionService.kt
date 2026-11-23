@@ -66,10 +66,19 @@ class ConnectionService : Service() {
     private var coordinator: TransferCoordinator? = null
     private var retryAttempt = 0
     private val clipboard = kr.jjw.graft.clipboard.ClipboardBridge()
+    private val outgoingTempFiles = java.util.concurrent.ConcurrentHashMap<UInt, File>()
+    private val pendingSharedFiles = java.util.concurrent.ConcurrentLinkedQueue<PendingSharedFile>()
+    private val pendingSharedText = java.util.concurrent.ConcurrentLinkedQueue<String>()
+    private lateinit var phoneRinger: PhoneRinger
+    private var batteryReceiver: android.content.BroadcastReceiver? = null
+    private var lastReportedBattery: Pair<Int, Boolean>? = null
+
+    private data class PendingSharedFile(val file: File, val mime: String)
 
     override fun onCreate() {
         super.onCreate()
         instance = this
+        phoneRinger = PhoneRinger(this, scope)
         createChannel()
         // The service can outlive the Activity, and a sticky restart has no UI at all, so it needs
         // its own handle on the file. Attaching twice is safe: the repository merges.
@@ -77,6 +86,8 @@ class ConnectionService : Service() {
             ConnectionRepository.attachHistoryStore(
                 TransferHistoryStore(File(filesDir, "transfer-history.json"))
             )
+            // Purge cached outgoing copies left behind by a previous process kill.
+            File(cacheDir, "outgoing").listFiles()?.forEach { it.delete() }
         }
         networkMonitor = NetworkMonitor(this) { wake.trySend(Unit) }.also { it.start() }
         startForeground(NOTIFICATION_ID, buildNotification("Starting…"))
@@ -89,9 +100,38 @@ class ConnectionService : Service() {
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                     .putBoolean("userStopped", false)
                     .apply()
-                val uri = intent.getParcelableExtra(EXTRA_URI, android.net.Uri::class.java)
+                val uri = readParcelableUri(intent, EXTRA_URI)
                 startConnection()
                 if (uri != null) scope.launch { sendPickedFile(uri) }
+                return START_STICKY
+            }
+
+            ACTION_SEND_FILES -> {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putBoolean("userStopped", false)
+                    .apply()
+                val uris = readParcelableUriList(intent, EXTRA_URIS)
+                startConnection()
+                if (uris.isNotEmpty()) {
+                    scope.launch { uris.forEach { sendPickedFile(it) } }
+                }
+                return START_STICKY
+            }
+
+            ACTION_SEND_TEXT -> {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putBoolean("userStopped", false)
+                    .apply()
+                val text = intent.getStringExtra(EXTRA_TEXT)
+                startConnection()
+                if (!text.isNullOrBlank()) {
+                    scope.launch { sendSharedTextNowOrQueue(text) }
+                }
+                return START_STICKY
+            }
+
+            ACTION_STOP_RING -> {
+                phoneRinger.stop()
                 return START_STICKY
             }
 
@@ -116,6 +156,8 @@ class ConnectionService : Service() {
 
     override fun onDestroy() {
         instance = null
+        unregisterBatteryMonitor()
+        phoneRinger.stop()
         networkMonitor?.stop()
         networkMonitor = null
         stopConnection()
@@ -124,20 +166,10 @@ class ConnectionService : Service() {
     }
 
     /**
-     * Copies the picked document into the cache and offers it to the Mac.
-     *
-     * The transfer coordinator works with files, not content URIs, and the document provider may
-     * revoke access once the picker returns; copying first keeps the transfer independent of that.
+     * Copies the picked document into the cache immediately (while the temporary read grant is
+     * valid) and offers it to the Mac right away or as soon as the connection reaches `hello.ok`.
      */
     private suspend fun sendPickedFile(uri: android.net.Uri) = withContext(Dispatchers.IO) {
-        val sessionCoordinator = coordinator
-        if (sessionCoordinator == null ||
-            ConnectionRepository.state.value.status !is ConnectionStatus.Connected
-        ) {
-            ConnectionRepository.onOutgoingFileResult(false, "Connect to your Mac first")
-            return@withContext
-        }
-
         val directory = File(cacheDir, "outgoing").apply { mkdirs() }
         // A provider can report any display name; keep it inside the cache directory.
         val name = SafeFilename.sanitize(displayName(uri) ?: "") ?: "file"
@@ -149,22 +181,105 @@ class ConnectionService : Service() {
             } ?: error("the provider returned no stream")
         }
         if (copied.isFailure) {
+            target.delete()
             ConnectionRepository.onOutgoingFileResult(false, "Could not read the file")
             return@withContext
         }
 
+        val mime = contentResolver.getType(uri)
+            ?.takeIf { it.isNotBlank() }
+            ?: android.webkit.MimeTypeMap.getSingleton()
+                .getMimeTypeFromExtension(target.extension.lowercase())
+            ?: "application/octet-stream"
+
+        val sessionCoordinator = coordinator
+        if (sessionCoordinator == null ||
+            ConnectionRepository.state.value.status !is ConnectionStatus.Connected
+        ) {
+            if (!isPaired(this@ConnectionService)) {
+                target.delete()
+                ConnectionRepository.onOutgoingFileResult(false, "Connect to your Mac first")
+                return@withContext
+            }
+            // Paired but still connecting (e.g., cold start from the Share Sheet): queue until hello.ok.
+            pendingSharedFiles.add(PendingSharedFile(target, mime))
+            ConnectionRepository.onOutgoingFileResult(true, null)
+            return@withContext
+        }
+
+        offerCachedFile(sessionCoordinator, target, mime)
+    }
+
+    private fun offerCachedFile(
+        sessionCoordinator: TransferCoordinator,
+        target: File,
+        mime: String,
+    ) {
         val offered = runCatching {
             // Ids restart at 1 in every session, so include the saved rows when picking the next
-                // one. Otherwise a new transfer collides with yesterday's and replaces its row.
-                val usedIds = sessionCoordinator.progress.keys +
-                    ConnectionRepository.state.value.history.map { it.id }
-                sessionCoordinator.offer(target, TransferIds.next(usedIds))
+            // one. Otherwise a new transfer collides with yesterday's and replaces its row.
+            val usedIds = sessionCoordinator.progressSnapshot().keys +
+                ConnectionRepository.state.value.history.map { it.id }
+            val transferId = TransferIds.next(usedIds)
+            outgoingTempFiles[transferId] = target
+            sessionCoordinator.offer(target, transferId, mime = mime)
+            transferId
         }
         if (offered.isFailure) {
+            outgoingTempFiles.entries.removeIf { it.value == target }
+            target.delete()
             ConnectionRepository.onOutgoingFileResult(false, "Could not start the transfer")
         } else {
+            ConnectionRepository.onTransferProgress(sessionCoordinator.progressSnapshot())
             ConnectionRepository.onOutgoingFileResult(true, null)
         }
+    }
+
+    private fun sendSharedTextNowOrQueue(text: String) {
+        val activeClient = client
+        if (activeClient != null && ConnectionRepository.state.value.status is ConnectionStatus.Connected) {
+            val envelope = clipboard.outgoing(text) ?: return
+            activeClient.send(envelope)
+            ConnectionRepository.onSubmitClipboard(text)
+        } else if (isPaired(this)) {
+            pendingSharedText.add(text)
+        }
+    }
+
+    private fun flushPendingShares(
+        sessionClient: GraftClient,
+        sessionCoordinator: TransferCoordinator,
+    ) {
+        while (true) {
+            val item = pendingSharedFiles.poll() ?: break
+            if (item.file.exists()) {
+                offerCachedFile(sessionCoordinator, item.file, item.mime)
+            }
+        }
+        while (true) {
+            val text = pendingSharedText.poll() ?: break
+            val envelope = clipboard.outgoing(text) ?: continue
+            sessionClient.send(envelope)
+            ConnectionRepository.onSubmitClipboard(text)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun readParcelableUri(intent: Intent, key: String): android.net.Uri? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(key, android.net.Uri::class.java)
+        } else {
+            intent.getParcelableExtra(key)
+        }
+
+    @Suppress("DEPRECATION")
+    private fun readParcelableUriList(intent: Intent, key: String): List<android.net.Uri> {
+        val list = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableArrayListExtra(key, android.net.Uri::class.java)
+        } else {
+            intent.getParcelableArrayListExtra(key)
+        }
+        return list?.filterNotNull().orEmpty()
     }
 
     /** A stable, app-scoped id the Mac can show; the Android ID is enough and needs no permission. */
@@ -286,44 +401,66 @@ class ConnectionService : Service() {
         client = sessionClient
 
         val directory = File(filesDir, "received")
-        val sessionCoordinator = TransferCoordinator(
+        lateinit var sessionCoordinator: TransferCoordinator
+        // Each transfer is recorded when its outcome changes, so a failed retry that later commits
+        // updates the row instead of leaving it marked as failed.
+        val recordedOutcomes = mutableMapOf<UInt, TransferFailureKind?>()
+        val outcomeLock = Any()
+        fun recordFinishedTransfers() {
+            val (completedIds, failureMap) = sessionCoordinator.finishedSnapshot()
+            val progressMap = sessionCoordinator.progressSnapshot()
+            val finished = completedIds + failureMap.keys
+            synchronized(outcomeLock) {
+                for (id in finished) {
+                    val error = failureMap[id]
+                    if (recordedOutcomes.containsKey(id) && recordedOutcomes[id] == error) continue
+                    recordedOutcomes[id] = error
+                    val progress = progressMap[id]
+                    outgoingTempFiles.remove(id)?.delete()
+                    ConnectionRepository.onTransferFinished(
+                        id = id,
+                        name = progress?.name ?: "file",
+                        bytes = progress?.total ?: progress?.confirmed ?: 0,
+                        direction = progress?.direction ?: TransferDirection.receive,
+                        error = error,
+                        destination = sessionCoordinator.locations[id],
+                    )
+                }
+            }
+        }
+
+        sessionCoordinator = TransferCoordinator(
             directory = directory,
             isPaired = { true },
             // Without this the resume lookups always miss and an interrupted transfer restarts.
             records = kr.jjw.graft.files.TransferRecordStore(File(filesDir, "transfers.json")),
             sendControl = { envelope -> sessionClient.send(envelope) },
             sendBinary = { bytes -> sessionClient.sendBinary(bytes) },
+            backlog = { sessionClient.pendingBytes() },
             receiversFactory = FallbackFileReceivingFactory.of(
                 primary = MediaStoreFileReceivingFactory.forResolver(contentResolver),
                 fallback = DirectoryFileReceiving.factory(directory),
             ),
+            sendRunner = { block -> scope.launch(Dispatchers.IO) { block() } },
+            onProgressChanged = {
+                ConnectionRepository.onTransferProgress(sessionCoordinator.progressSnapshot())
+                recordFinishedTransfers()
+            },
         )
         coordinator = sessionCoordinator
-
-        // Each transfer is recorded when its outcome changes, so a failed retry that later commits
-        // updates the row instead of leaving it marked as failed.
-        val recordedOutcomes = mutableMapOf<UInt, TransferFailureKind?>()
-        fun recordFinishedTransfers() {
-            val finished = sessionCoordinator.completed + sessionCoordinator.failures.keys
-            for (id in finished) {
-                val error = sessionCoordinator.failures[id]
-                if (recordedOutcomes.containsKey(id) && recordedOutcomes[id] == error) continue
-                recordedOutcomes[id] = error
-                val progress = sessionCoordinator.progress[id]
-                ConnectionRepository.onTransferFinished(
-                    id = id,
-                    name = progress?.name ?: "file",
-                    bytes = progress?.total ?: progress?.confirmed ?: 0,
-                    direction = progress?.direction ?: TransferDirection.receive,
-                    error = error,
-                    destination = sessionCoordinator.locations[id],
-                )
-            }
-        }
 
         ConnectionRepository.onEvent(ConnectionEvent.Connecting)
         var outcome = Outcome.RETRY
         var closed = false
+        val stallWatch = scope.launch {
+            while (true) {
+                delay(5_000)
+                if (sessionCoordinator.checkStalls()) {
+                    ConnectionRepository.onTransferProgress(sessionCoordinator.progressSnapshot())
+                    recordFinishedTransfers()
+                }
+            }
+        }
 
         try {
         sessionClient.connect().collect { event ->
@@ -343,12 +480,7 @@ class ConnectionService : Service() {
                             Envelope.create("pong", re = event.envelope.id)
                         )
 
-                        "pair.ok" -> sessionClient.send(
-                            Envelope.create(
-                                "hello",
-                                buildJsonObject { put("proto", JsonPrimitive(1)) }
-                            )
-                        )
+                        "pair.ok" -> sessionClient.send(ClientHandshake.hello())
 
                         "hello.ok" -> {
                             retryAttempt = 0
@@ -359,13 +491,46 @@ class ConnectionService : Service() {
                                 flushPendingNotifications(sessionClient)
                             }
                             flushPendingNotifications(sessionClient)
+                            flushPendingShares(sessionClient, sessionCoordinator)
+                            registerBatteryMonitor(sessionClient)
                             stored?.let { ConnectionRepository.onPeerPaired(it.name) }
-                            updateNotification(stored?.name ?: "Connected")
+                            updateNotification(stored?.name ?: "Connected", connected = true)
+                        }
+
+                        "device.ring" -> {
+                            val action = runCatching {
+                                event.envelope.payload.let {
+                                    (it as? kotlinx.serialization.json.JsonObject)
+                                        ?.get("action")
+                                        ?.let { v -> (v as? JsonPrimitive)?.content }
+                                }
+                            }.getOrNull()
+                            if (action == "stop") phoneRinger.stop() else phoneRinger.start()
+                        }
+
+                        "notification.dismiss" -> {
+                            val key = runCatching {
+                                (event.envelope.payload as? kotlinx.serialization.json.JsonObject)
+                                    ?.get("key")
+                                    ?.let { (it as? JsonPrimitive)?.content }
+                            }.getOrNull()
+                            if (!key.isNullOrBlank()) {
+                                kr.jjw.graft.notifications.GraftNotificationListener.dismiss(key)
+                            }
+                        }
+
+                        "notification.reply" -> {
+                            val obj = event.envelope.payload as? kotlinx.serialization.json.JsonObject
+                            val key = (obj?.get("key") as? JsonPrimitive)?.content
+                            val text = (obj?.get("text") as? JsonPrimitive)?.content
+                            if (!key.isNullOrBlank() && !text.isNullOrBlank()) {
+                                kr.jjw.graft.notifications.GraftNotificationListener.reply(key, text)
+                            }
                         }
 
                         else -> Unit
                     }
-                    ConnectionRepository.onTransferProgress(sessionCoordinator.progress)
+                    ConnectionRepository.onTransferProgress(sessionCoordinator.progressSnapshot())
                     recordFinishedTransfers()
                 }
 
@@ -384,7 +549,7 @@ class ConnectionService : Service() {
 
                 is ConnectionEvent.Binary -> {
                     sessionCoordinator.onBinary(event.data)
-                    ConnectionRepository.onTransferProgress(sessionCoordinator.progress)
+                    ConnectionRepository.onTransferProgress(sessionCoordinator.progressSnapshot())
                     recordFinishedTransfers()
                 }
 
@@ -403,8 +568,13 @@ class ConnectionService : Service() {
         } finally {
             // Cancellation skips the normal path; without this, receivers stay pending and
             // filesDir/received keeps its .part files.
+            stallWatch.cancel()
+            unregisterBatteryMonitor()
+            phoneRinger.stop()
             ConnectionRepository.onPendingNotification = null
             sessionCoordinator.cancelAll()
+            outgoingTempFiles.values.forEach { it.delete() }
+            outgoingTempFiles.clear()
             sessionClient.close()
             client = null
             coordinator = null
@@ -432,10 +602,63 @@ class ConnectionService : Service() {
                         put("ts", JsonPrimitive(notification.postedAt))
                         put("key", JsonPrimitive(notification.key))
                         put("priority", JsonPrimitive(notification.priority))
+                        put("replyable", JsonPrimitive(notification.replyable))
                     }
                 )
             )
         }
+        for (key in ConnectionRepository.takePendingRemovedNotifications()) {
+            sessionClient.send(
+                Envelope.create(
+                    "notification.removed",
+                    buildJsonObject { put("key", JsonPrimitive(key)) }
+                )
+            )
+        }
+    }
+
+    private fun registerBatteryMonitor(sessionClient: GraftClient) {
+        unregisterBatteryMonitor()
+        lastReportedBattery = null
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent == null) return
+                sendBatteryStatus(sessionClient, intent)
+            }
+        }
+        batteryReceiver = receiver
+        val sticky = registerReceiver(receiver, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        if (sticky != null) {
+            sendBatteryStatus(sessionClient, sticky)
+        }
+    }
+
+    private fun unregisterBatteryMonitor() {
+        batteryReceiver?.let { runCatching { unregisterReceiver(it) } }
+        batteryReceiver = null
+        lastReportedBattery = null
+    }
+
+    private fun sendBatteryStatus(sessionClient: GraftClient, intent: Intent) {
+        val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+        if (level < 0 || scale <= 0) return
+        val percent = ((level * 100) / scale).coerceIn(0, 100)
+        val status = intent.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+        val charging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == android.os.BatteryManager.BATTERY_STATUS_FULL
+        val pair = percent to charging
+        if (lastReportedBattery == pair) return
+        lastReportedBattery = pair
+        sessionClient.send(
+            Envelope.create(
+                "device.status",
+                buildJsonObject {
+                    put("battery", JsonPrimitive(percent))
+                    put("charging", JsonPrimitive(charging))
+                }
+            )
+        )
     }
 
     private fun stopConnection() {
@@ -558,7 +781,7 @@ class ConnectionService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    private fun buildNotification(text: String): Notification {
+    private fun buildNotification(text: String, connected: Boolean = false): Notification {
         val open = PendingIntent.getActivity(
             this,
             0,
@@ -566,19 +789,35 @@ class ConnectionService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val state = ConnectionNotificationState.forStatus(text, null, transferring = false)
-        return Notification.Builder(this, CHANNEL_ID)
+        val builder = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Graft")
             .setContentText(state.text)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setContentIntent(open)
             .setOngoing(state.ongoing)
             .setOnlyAlertOnce(true)
-            .build()
+        if (connected) {
+            val sendClip = PendingIntent.getActivity(
+                this,
+                1,
+                Intent(this, kr.jjw.graft.ui.SendClipboardActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            builder.addAction(
+                Notification.Action.Builder(
+                    null,
+                    getString(kr.jjw.graft.R.string.tile_send_clipboard),
+                    sendClip,
+                ).build()
+            )
+        }
+        return builder.build()
     }
 
-    private fun updateNotification(text: String) {
+    private fun updateNotification(text: String, connected: Boolean = false) {
         getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION_ID, buildNotification(text))
+            .notify(NOTIFICATION_ID, buildNotification(text, connected = connected))
     }
 
     private enum class Outcome { RETRY, STOP }
@@ -588,7 +827,12 @@ class ConnectionService : Service() {
         const val ACTION_DISCONNECT = "kr.jjw.graft.DISCONNECT"
         const val PREFS = "graft-peer"
         const val ACTION_SEND_FILE = "kr.jjw.graft.action.SEND_FILE"
+        const val ACTION_SEND_FILES = "kr.jjw.graft.action.SEND_FILES"
+        const val ACTION_SEND_TEXT = "kr.jjw.graft.action.SEND_TEXT"
+        const val ACTION_STOP_RING = "kr.jjw.graft.action.STOP_RING"
         const val EXTRA_URI = "uri"
+        const val EXTRA_URIS = "uris"
+        const val EXTRA_TEXT = "text"
         private const val CHANNEL_ID = "graft-connection"
         private const val KEY_PAIRING_COMPLETE = "pairingComplete"
         const val NOTIFICATION_ID = 1
@@ -720,11 +964,49 @@ class ConnectionService : Service() {
             return null
         }
 
+        /** Cancels an active transfer by its protocol id and removes its temp cache file if any. */
+        fun cancelTransfer(id: UInt) {
+            val service = instance ?: return
+            val active = service.coordinator ?: return
+            active.cancel(id)
+            service.outgoingTempFiles.remove(id)?.delete()
+            ConnectionRepository.onTransferProgress(active.progressSnapshot())
+        }
+
         /** Asks the service to offer a document to the Mac. */
         fun sendFile(context: Context, uri: android.net.Uri) {
             val intent = Intent(context, ConnectionService::class.java).apply {
                 action = ACTION_SEND_FILE
                 putExtra(EXTRA_URI, uri)
+                clipData = android.content.ClipData.newRawUri("file", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startForegroundService(intent)
+        }
+
+        /** Asks the service to offer multiple shared documents to the Mac. */
+        fun sendFiles(context: Context, uris: List<android.net.Uri>) {
+            if (uris.isEmpty()) return
+            val clip = android.content.ClipData.newRawUri("files", uris.first()).apply {
+                for (index in 1 until uris.size) {
+                    addItem(android.content.ClipData.Item(uris[index]))
+                }
+            }
+            val intent = Intent(context, ConnectionService::class.java).apply {
+                action = ACTION_SEND_FILES
+                putParcelableArrayListExtra(EXTRA_URIS, ArrayList(uris))
+                clipData = clip
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startForegroundService(intent)
+        }
+
+        /** Sends shared text (such as a URL or note from the Share Sheet) to the Mac clipboard. */
+        fun sendSharedText(context: Context, text: String) {
+            if (text.isBlank()) return
+            val intent = Intent(context, ConnectionService::class.java).apply {
+                action = ACTION_SEND_TEXT
+                putExtra(EXTRA_TEXT, text)
             }
             context.startForegroundService(intent)
         }

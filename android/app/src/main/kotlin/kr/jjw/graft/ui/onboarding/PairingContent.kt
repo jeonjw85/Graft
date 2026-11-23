@@ -20,8 +20,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import kr.jjw.graft.R
 import kr.jjw.graft.service.ConnectionService
 import kr.jjw.graft.ui.QRScanner
 import kr.jjw.graft.ui.ScanViewModel
@@ -46,7 +48,7 @@ fun PairingContent(
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(GraftSpacing.s)) {
         Text(
-            "Scan the QR code in the Graft menu bar, or type the values below.",
+            stringResource(R.string.pairing_scan_instruction),
             style = MaterialTheme.typography.bodyMedium,
             color = GraftPalette.onSurfaceVariant,
         )
@@ -95,14 +97,14 @@ fun PairingDialog(onDismiss: () -> Unit) {
                     .verticalScroll(rememberScrollState())
                     .padding(GraftSpacing.l),
             ) {
-                Text("Pair a phone", style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.pairing_dialog_title), style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(GraftSpacing.s))
                 PairingContent(
                     onPermissionDenied = { },
                     onPaired = onDismiss,
                 )
                 Spacer(Modifier.height(GraftSpacing.s))
-                TextButton(onClick = onDismiss) { Text("Close") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
             }
         }
     }

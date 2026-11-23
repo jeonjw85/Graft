@@ -16,8 +16,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kr.jjw.graft.R
 import kr.jjw.graft.service.ConnectionService
 import kr.jjw.graft.ui.ManualPairingRules
 
@@ -34,10 +36,10 @@ fun ManualPairingForm(
     var message by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text("Pair without a camera", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.pairing_manual_title), style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.height(4.dp))
         Text(
-            "Enter the three values shown on your Mac's menu bar window.",
+            stringResource(R.string.pairing_manual_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -45,7 +47,7 @@ fun ManualPairingForm(
         OutlinedTextField(
             value = code,
             onValueChange = { code = it },
-            label = { Text("Six-digit code") },
+            label = { Text(stringResource(R.string.pairing_field_code)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -53,21 +55,21 @@ fun ManualPairingForm(
         OutlinedTextField(
             value = prefix,
             onValueChange = { prefix = it },
-            label = { Text("Fingerprint (8 characters)") },
+            label = { Text(stringResource(R.string.pairing_field_fingerprint)) },
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(6.dp))
         OutlinedTextField(
             value = host,
             onValueChange = { host = it },
-            label = { Text("Mac IP address") },
+            label = { Text(stringResource(R.string.pairing_field_host)) },
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(6.dp))
         OutlinedTextField(
             value = port,
             onValueChange = { port = it },
-            label = { Text("Port") },
+            label = { Text(stringResource(R.string.pairing_field_port)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -90,7 +92,7 @@ fun ManualPairingForm(
                 }
             }
         ) {
-            Text("Pair")
+            Text(stringResource(R.string.action_pair))
         }
         message?.let {
             Spacer(Modifier.height(6.dp))

@@ -8,19 +8,22 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import kr.jjw.graft.R
 import kr.jjw.graft.ui.theme.GraftIcons
 
 /** The three jobs of the app: the link, the files, the alerts. */
-enum class AppTab(val label: String, val icon: ImageVector) {
-    Connection("Connection", GraftIcons.Link),
-    Files("Files", GraftIcons.Files),
-    Alerts("Alerts", GraftIcons.Alerts),
+enum class AppTab(val label: String, val labelRes: Int, val icon: ImageVector) {
+    Connection("Connection", R.string.tab_connection, GraftIcons.Link),
+    Files("Files", R.string.tab_files, GraftIcons.Files),
+    Alerts("Alerts", R.string.tab_alerts, GraftIcons.Alerts),
 }
 
 object AppTabRules {
@@ -30,9 +33,22 @@ object AppTabRules {
 }
 
 @Composable
-fun MainScaffold(paired: Boolean, onForget: () -> Unit) {
-    var tab by remember { mutableStateOf(AppTab.Connection) }
+fun MainScaffold(
+    paired: Boolean,
+    onForget: () -> Unit,
+    requestedTab: AppTab? = null,
+    onTabHandled: () -> Unit = {},
+) {
+    var tab by remember { mutableStateOf(requestedTab ?: AppTab.Connection) }
     var settingsOpen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(requestedTab) {
+        if (requestedTab != null) {
+            tab = requestedTab
+            settingsOpen = false
+            onTabHandled()
+        }
+    }
 
     // Back leaves the app from the first tab; from another tab it returns to the first.
     BackHandler(enabled = AppTabRules.onBack(tab) != null) {
@@ -50,11 +66,12 @@ fun MainScaffold(paired: Boolean, onForget: () -> Unit) {
         bottomBar = {
             NavigationBar {
                 AppTab.entries.forEach { entry ->
+                    val title = stringResource(entry.labelRes)
                     NavigationBarItem(
                         selected = tab == entry,
                         onClick = { tab = entry },
-                        icon = { Icon(entry.icon, contentDescription = entry.label) },
-                        label = { Text(entry.label) },
+                        icon = { Icon(entry.icon, contentDescription = title) },
+                        label = { Text(title) },
                     )
                 }
             }

@@ -9,6 +9,7 @@ data class PostedNotification(
     val postedAt: Long,
     val key: String,
     val priority: String,
+    val replyable: Boolean = false,
 )
 
 /**

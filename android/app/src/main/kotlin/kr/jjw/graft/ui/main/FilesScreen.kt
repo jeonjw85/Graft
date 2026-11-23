@@ -36,10 +36,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kr.jjw.graft.R
 import kr.jjw.graft.core.TransferDirection
 import kr.jjw.graft.files.TransferProgress
 import kr.jjw.graft.service.ConnectionRepository
@@ -52,6 +54,78 @@ import kr.jjw.graft.ui.components.SectionHeader
 import kr.jjw.graft.ui.components.SettingsGroup
 import kr.jjw.graft.ui.theme.GraftPalette
 import kr.jjw.graft.ui.theme.GraftSpacing
+
+/** Live throughput and remaining-time estimate for an active transfer. */
+data class TransferMetrics(
+    val bytesPerSecond: Double,
+    val remainingSeconds: Double?,
+) {
+    val label: String
+        get() {
+            val speed = formatSpeed(bytesPerSecond)
+            return if (remainingSeconds != null) "$speed  ·  ${formatEta(remainingSeconds)}" else speed
+        }
+
+    companion object {
+        fun formatSpeed(bytesPerSecond: Double): String {
+            val kib = bytesPerSecond / 1024.0
+            return if (kib < 1024.0) {
+                "%.0f KiB/s".format(kib.coerceAtLeast(1.0))
+            } else {
+                "%.1f MiB/s".format(kib / 1024.0)
+            }
+        }
+
+        fun formatEta(seconds: Double): String {
+            val rounded = kotlin.math.ceil(seconds).toLong()
+            if (rounded <= 1L) return "< 1s left"
+            if (rounded < 60L) return "${rounded}s left"
+            val minutes = rounded / 60L
+            val remSec = rounded % 60L
+            if (minutes < 60L) {
+                return if (remSec == 0L) "${minutes}m left" else "${minutes}m ${remSec}s left"
+            }
+            val hours = minutes / 60L
+            val remMin = minutes % 60L
+            return "${hours}h ${remMin}m left"
+        }
+    }
+}
+
+/** Computes smoothed transfer speed and ETA from progress updates. */
+class TransferSpeedTracker {
+    private data class Sample(val startMillis: Long, val startBytes: Long)
+    private val samples = mutableMapOf<UInt, Sample>()
+
+    fun update(
+        active: List<ActiveTransfer>,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): Map<UInt, TransferMetrics> {
+        val activeIds = active.map { it.id }.toSet()
+        samples.keys.retainAll(activeIds)
+
+        val result = mutableMapOf<UInt, TransferMetrics>()
+        for (item in active) {
+            val sample = samples[item.id]
+            if (sample == null) {
+                samples[item.id] = Sample(nowMillis, item.progress.confirmed)
+                continue
+            }
+            val elapsedSeconds = (nowMillis - sample.startMillis) / 1000.0
+            val moved = item.progress.confirmed - sample.startBytes
+            if (elapsedSeconds < 0.5 || moved <= 0L) continue
+            val rate = moved.toDouble() / elapsedSeconds
+            if (rate <= 0.0) continue
+            val remaining = if (item.progress.total > item.progress.confirmed) {
+                (item.progress.total - item.progress.confirmed).toDouble() / rate
+            } else {
+                null
+            }
+            result[item.id] = TransferMetrics(rate, remaining)
+        }
+        return result
+    }
+}
 
 /** An in-flight transfer together with the id the protocol assigned it. */
 data class ActiveTransfer(val id: UInt, val progress: TransferProgress)
@@ -89,7 +163,7 @@ object FilesScreenRules {
 
     fun formatSize(bytes: Long): String {
         if (bytes < 1024) return "$bytes B"
-        val units = listOf("KB", "MiB", "GiB", "TiB")
+        val units = listOf("KiB", "MiB", "GiB", "TiB")
         var value = bytes.toDouble() / 1024
         var unit = 0
         while (value >= 1024 && unit < units.lastIndex) {
@@ -153,9 +227,12 @@ fun FilesScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    val pickFile = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let { ConnectionService.sendFile(context, it) } }
+    val speedTracker = remember { TransferSpeedTracker() }
+    val metrics = remember(screen.active) { speedTracker.update(screen.active) }
+
+    val pickFiles = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris -> uris.forEach { ConnectionService.sendFile(context, it) } }
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
@@ -169,14 +246,14 @@ fun FilesScreen(modifier: Modifier = Modifier) {
             ),
         ) {
             item {
-                Text("Files", style = MaterialTheme.typography.headlineSmall)
+                Text(stringResource(R.string.files_title), style = MaterialTheme.typography.headlineSmall)
             }
             item {
                 Button(
-                    onClick = { pickFile.launch(arrayOf("*/*")) },
+                    onClick = { pickFiles.launch(arrayOf("*/*")) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Send a file to Mac")
+                    Text(stringResource(R.string.action_send_file_to_mac))
                 }
             }
             state.outgoingError?.let { message ->
@@ -190,8 +267,9 @@ fun FilesScreen(modifier: Modifier = Modifier) {
             }
 
             if (screen.active.isNotEmpty()) {
-                item { SectionHeader("In progress") }
+                item { SectionHeader(stringResource(R.string.files_in_progress)) }
                 items(screen.active, key = { "active-${it.id}" }) { active ->
+                    val transferMetric = metrics[active.id]
                     SettingsGroup {
                         Row(
                             modifier = Modifier
@@ -215,26 +293,31 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                                 )
                                 Text(
                                     if (active.progress.total == 0L) {
-                                        "Finishing…"
+                                        stringResource(R.string.files_finishing)
                                     } else {
-                                        "${FilesScreenRules.percent(active.progress)}%  ·  " +
+                                        val base = "${FilesScreenRules.percent(active.progress)}%  ·  " +
                                             FilesScreenRules.formatSize(active.progress.total)
+                                        if (transferMetric != null) "$base  ·  ${transferMetric.label}" else base
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = GraftPalette.onSurfaceVariant,
                                 )
                             }
+                            TextButton(
+                                onClick = { ConnectionService.cancelTransfer(active.id) }
+                            ) { Text(stringResource(R.string.action_cancel)) }
                         }
                     }
                 }
             }
 
-            item { SectionHeader("Recent") }
+            item { SectionHeader(stringResource(R.string.files_recent)) }
             if (screen.recent.isEmpty()) {
-                item { EmptyState("No files yet. Files you send or receive appear here.") }
+                item { EmptyState(stringResource(R.string.files_empty)) }
             } else {
                 items(screen.recent, key = { it.id.toString() }) { record ->
                     val openable = FilesScreenRules.canOpen(record.destination)
+                    val noAppMessage = stringResource(R.string.files_no_app_can_open)
                     SettingsGroup {
                         Row(
                             modifier = Modifier
@@ -265,22 +348,26 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                                 TextButton(
                                     onClick = {
                                         val opened = runCatching {
+                                            val uri = android.net.Uri.parse(record.destination)
+                                            val extension = record.name.substringAfterLast('.', "").lowercase()
+                                            val mime = context.contentResolver.getType(uri)
+                                                ?.takeIf { it.isNotBlank() && it != "application/octet-stream" }
+                                                ?: android.webkit.MimeTypeMap.getSingleton()
+                                                    .getMimeTypeFromExtension(extension)
+                                                ?: "*/*"
                                             context.startActivity(
                                                 Intent(Intent.ACTION_VIEW)
-                                                    .setDataAndType(
-                                                        android.net.Uri.parse(record.destination),
-                                                        "*/*",
-                                                    )
+                                                    .setDataAndType(uri, mime)
                                                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                             )
                                         }
                                         if (opened.isFailure) {
                                             scope.launch {
-                                                snackbar.showSnackbar("No app can open this file")
+                                                snackbar.showSnackbar(noAppMessage)
                                             }
                                         }
                                     }
-                                ) { Text("Open") }
+                                ) { Text(stringResource(R.string.action_open)) }
                             }
                         }
                     }

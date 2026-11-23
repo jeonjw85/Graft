@@ -146,6 +146,7 @@ object ConnectionRepository {
 
 
     private val pending = java.util.concurrent.ConcurrentLinkedQueue<kr.jjw.graft.notifications.PostedNotification>()
+    private val pendingRemoved = java.util.concurrent.ConcurrentLinkedQueue<String>()
 
     /**
      * Invoked when a notification is queued while a connection is live.
@@ -169,11 +170,27 @@ object ConnectionRepository {
         onPendingNotification?.invoke()
     }
 
+    /** Queues a notification dismissal so the Mac removes the matching banner. */
+    fun onNotificationRemoved(key: String) {
+        if (pendingRemoved.size >= MAX_PENDING) pendingRemoved.poll()
+        pendingRemoved.add(key)
+        onPendingNotification?.invoke()
+    }
+
     /** Removes and returns everything queued for sending. */
     fun takePendingNotifications(): List<kr.jjw.graft.notifications.PostedNotification> {
         val drained = mutableListOf<kr.jjw.graft.notifications.PostedNotification>()
         while (true) {
             drained.add(pending.poll() ?: break)
+        }
+        return drained
+    }
+
+    /** Removes and returns dismissed notification keys queued for syncing to Mac. */
+    fun takePendingRemovedNotifications(): List<String> {
+        val drained = mutableListOf<String>()
+        while (true) {
+            drained.add(pendingRemoved.poll() ?: break)
         }
         return drained
     }
