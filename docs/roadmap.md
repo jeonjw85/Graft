@@ -20,11 +20,12 @@
 
 ## Candidates for v0.2 and later
 
-1. Notification replies and opening the app from the phone
-2. Clipboard image sharing
-3. Mac screen capture transfer
-4. Phone battery level and ring-my-phone
-5. Multi-device support
-6. Remote access outside the local network
+1. [x] Notification replies and dismiss synchronization (Android <-> Mac)
+2. [x] Clipboard image sharing (Mac -> Android via chunked PNG transfer)
+3. [x] Mac screen capture automatic transfer (opt-in)
+4. [x] Phone battery level and ring-my-phone
+5. [x] Android Share Sheet, Quick Settings tile, macOS drag-and-drop & folder zip
+6. [ ] Multi-device support
+7. [ ] Remote access outside the local network
 
 Priority is decided in the issue tracker.

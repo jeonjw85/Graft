@@ -2,36 +2,34 @@
 
 An open-source tool that connects a Mac and an Android phone over the same Wi-Fi network. Transfer files, share clipboard text, and mirror notifications between the two devices. Nothing leaves the local network.
 
-> **Status:** v0.1.5 is the current release. Download the DMG, APK, or AAB from the
+> **Status:** v0.2.0 is the current release. Download the DMG, APK, or AAB from the
 > [releases page](https://github.com/jeonjw85/Graft/releases). The macOS build is ad-hoc signed and
 > not notarized, so the first launch needs an explicit approval; see
 > [install instructions](docs/install.md).
 
-## Planned features (v0.1)
+## Features (v0.2)
 
 | Feature | Direction | Status |
 |---|---|---|
-| File transfer (resume, hash verification) | Mac <-> Android | Working in dev builds |
-| Clipboard text sharing | Mac -> Android (automatic) | Working in dev builds |
-| Clipboard text sharing | Android -> Mac (app button) | Working in dev builds |
-| Notification display | Android -> Mac | Working in dev builds |
-| Pairing: QR scan, or code + fingerprint | Mac <-> Android | Working in dev builds |
+| File & folder transfer (resume, hash check, cancel, speed/ETA, multi-file, drag & drop) | Mac <-> Android | Implemented |
+| Android Share Sheet (`ACTION_SEND` / `ACTION_SEND_MULTIPLE`) | Android -> Mac | Implemented |
+| Clipboard text sharing (automatic Mac sync, password-manager safe) | Mac -> Android | Implemented |
+| Clipboard image sharing (PNG via chunked file transfer) | Mac -> Android | Implemented |
+| Clipboard text sharing (app button, Quick Settings tile, notification action) | Android -> Mac | Implemented |
+| Notification mirroring, inline replies, and two-way dismiss sync | Android <-> Mac | Implemented |
+| Mac screenshot auto-transfer (opt-in) | Mac -> Android | Implemented |
+| Phone battery indicator & ring-my-phone | Android <-> Mac | Implemented |
+| Pairing: QR scan, or code + fingerprint | Mac <-> Android | Implemented |
+| Localization (English & Korean) | Mac & Android | Implemented |
 
 Graft does not send Mac notifications to Android, because macOS has no public API for reading other apps' notifications. See the [threat model](docs/threat-model.md) for details.
 
-On the Mac, the menu bar popover shows the link state and its actions (pair, send a file, send
-clipboard). Pairing and settings live in their own windows: pairing opens on the QR code and offers
-the typed values behind a link, settings holds notifications, clipboard, transfer history, and an
-About page with the fingerprint, and closing the pairing window revokes the offer. Both apps use the same dark appearance.
+On the Mac, the menu bar popover shows the link state, phone battery level, and quick actions (pair, send files/folders or drop them onto the popover, send clipboard text or image, ring phone, and cancel active transfers with live speed & ETA). Pairing and settings live in their own windows: pairing opens on the QR code and offers the typed values behind a link, settings holds notifications, clipboard (including automatic Mac clipboard sync), transfers (custom receive folder, persistent history with Reveal in Finder, opt-in auto-screenshot forwarding), and an About page with Launch at Login and the certificate fingerprint. Closing the pairing window revokes the offer. Both apps use the same dark appearance and follow the system language (English or Korean).
 
-The Android app opens on a three-tab layout once a phone is paired: **Connection** (link state,
-pairing, clipboard), **Files** (send, progress, recent transfers with an Open action), and **Alerts**
-(notification access, allowed apps, recent forwards). It has a single dark appearance by design.
+The Android app opens on a three-tab layout once paired: **Connection** (link state, pairing, send/copy clipboard), **Files** (multi-file send, progress with speed/ETA & cancel, recent transfers with an Open action), and **Alerts** (notification access, allowed apps, recent forwards). You can also share files or text directly from other apps via the Android Share Sheet, or send your clipboard in one tap from the Quick Settings tile or connection notification.
 
 Received files land in `Download/Graft` so they are visible to other apps; if Android refuses the
 MediaStore insert, the file is kept in app storage and the row says so.
-
-Current state: pairing, file transfer (both directions), clipboard sharing, and Android to Mac notification forwarding are implemented. The Android app scans the QR code, sends files, copies a received clipboard while it is open, and keeps its connection alive in the background.
 
 ## Requirements
 
