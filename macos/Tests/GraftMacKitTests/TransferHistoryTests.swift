@@ -71,4 +71,36 @@ final class TransferHistoryTests: XCTestCase {
 
         XCTAssertTrue(history.records.isEmpty)
     }
+
+    func testHistoryStoreRoundTripsAndClears() {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("graft-history-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = TransferHistoryStore(file: dir.appendingPathComponent("transfer-history.json"))
+
+        history.record(
+            id: 1,
+            name: "photo.jpg",
+            bytes: 2048,
+            direction: .receive,
+            failure: nil,
+            destinationPath: "/tmp/photo.jpg"
+        )
+        history.record(
+            id: 2,
+            name: "broken.bin",
+            bytes: 512,
+            direction: .send,
+            failure: .stalled
+        )
+        store.save(history.records)
+
+        let restored = store.load()
+        XCTAssertEqual(restored.count, 2)
+        XCTAssertEqual(restored.first?.failure, .stalled)
+        XCTAssertEqual(restored.last?.destinationPath, "/tmp/photo.jpg")
+
+        store.clear()
+        XCTAssertTrue(store.load().isEmpty)
+    }
 }

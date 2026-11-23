@@ -182,7 +182,7 @@ public final class TransportConnection: @unchecked Sendable {
     }
 
     /// Sends a binary WebSocket frame (file data).
-    public func sendBinary(_ data: Data, completion: (() -> Void)? = nil) throws {
+    public func sendBinary(_ data: Data, completion: (@Sendable () -> Void)? = nil) throws {
         guard isReady else { throw TransportError.notReady }
         let metadata = NWProtocolWebSocket.Metadata(opcode: .binary)
         let context = NWConnection.ContentContext(identifier: "binary", metadata: [metadata])
@@ -202,7 +202,7 @@ public final class TransportConnection: @unchecked Sendable {
     ///
     /// Callers that close right after sending must use this: cancelling immediately can drop the
     /// frame, so the peer never sees the error it was sent.
-    public func send(_ envelope: Envelope, completion: (() -> Void)?) throws {
+    public func send(_ envelope: Envelope, completion: (@Sendable () -> Void)?) throws {
         guard isReady else { throw TransportError.notReady }
         let data = try MessageCodec.encode(envelope)
         let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
@@ -333,12 +333,49 @@ public final class TransportConnection: @unchecked Sendable {
                     as? NWProtocolWebSocket.Metadata
                 if metadata?.opcode == .binary {
                     self.deliverBinary(data)
-                } else if let envelope = try? MessageCodec.decode(data) {
-                    self.deliver(envelope)
+                } else {
+                    do {
+                        let envelope = try MessageCodec.decode(data)
+                        self.deliver(envelope)
+                    } catch let codecError as CodecError {
+                        self.handleDecodeFailure(codecError)
+                        return
+                    } catch {
+                        self.handleDecodeFailure(.malformed("invalid frame"))
+                        return
+                    }
                 }
             }
             if error != nil { return }
             self.readLoop()
+        }
+    }
+
+    /// Enforces protocol §1.1 and §1.2 on malformed, oversized, or unsupported-version text frames.
+    private func handleDecodeFailure(_ error: CodecError) {
+        switch error {
+        case .oversized:
+            close()
+        case .unsupportedVersion:
+            let reply = Envelope(
+                type: "error",
+                payload: .object([
+                    "code": .string("proto_unsupported"),
+                    "message": .string("unsupported protocol version")
+                ])
+            )
+            try? send(reply)
+            close()
+        case .malformed:
+            let reply = Envelope(
+                type: "error",
+                payload: .object([
+                    "code": .string("bad_payload"),
+                    "message": .string("malformed control frame")
+                ])
+            )
+            try? send(reply)
+            close()
         }
     }
 }

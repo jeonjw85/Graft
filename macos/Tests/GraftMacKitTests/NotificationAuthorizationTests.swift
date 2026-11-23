@@ -3,8 +3,8 @@ import XCTest
 import GraftProtocol
 
 private final class FakeCenter: NotificationCenterPort {
-    var added: [(String, String)] = []
-    func add(title: String, body: String) { added.append((title, body)) }
+    var added: [(String, String, String)] = []
+    func add(title: String, subtitle: String, body: String) { added.append((title, subtitle, body)) }
 }
 
 private final class FakeAuthorization: NotificationAuthorizationPort {
@@ -13,7 +13,7 @@ private final class FakeAuthorization: NotificationAuthorizationPort {
 
     init(answer: Bool) { self.answer = answer }
 
-    func request(completion: @escaping (Bool) -> Void) {
+    func request(completion: @escaping @Sendable (Bool) -> Void) {
         calls += 1
         completion(answer)
     }

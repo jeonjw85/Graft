@@ -334,6 +334,96 @@ final class TransferCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.progress[9]?.confirmed, UInt64(data.count))
     }
 
+    func testStalledReceiveTimesOutAndRemovesPartialFile() throws {
+        var now = Date(timeIntervalSince1970: 1_762_752_000)
+        let store = recordStore()
+        let coordinator = TransferCoordinator(
+            directory: directory,
+            isPaired: { true },
+            sendControl: { [weak self] envelope in self?.sentControl.append(envelope) },
+            sendBinary: { _ in },
+            records: store,
+            clock: { now }
+        )
+
+        coordinator.onControl(offerEnvelope(tid: 4, name: "stalled.bin", size: 128 * 1024))
+        coordinator.onBinary(try BinaryFrame(transferId: 4, offset: 0, data: payload(64 * 1024)).encoded())
+        let partFile = directory.appendingPathComponent("stalled.bin.part")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: partFile.path))
+
+        now = now.addingTimeInterval(29)
+        XCTAssertFalse(coordinator.checkStalls(now: now))
+
+        now = now.addingTimeInterval(1)
+        XCTAssertTrue(coordinator.checkStalls(now: now))
+        XCTAssertEqual(coordinator.failures[4], .stalled)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: partFile.path))
+        XCTAssertEqual(store.count(), 0)
+        XCTAssertEqual(sentControl.last?.type, "file.cancel")
+    }
+
+    func testCancelAllFlushesExactOffsetForResumingLargePartial() throws {
+        let data = payload(1_500 * 1024) // 1.5 MiB
+        let cut = 1_200 * 1024
+        let store = recordStore()
+
+        let first = coordinator(records: store)
+        first.onControl(offerEnvelope(tid: 1, name: "large.bin", size: data.count))
+        for offset in stride(from: 0, to: cut, by: 64 * 1024) {
+            let end = min(offset + 64 * 1024, cut)
+            let frame = try BinaryFrame(transferId: 1, offset: UInt64(offset), data: data.subdata(in: offset..<end))
+            first.onBinary(frame.encoded())
+        }
+        first.cancelAll()
+
+        sentControl = []
+        let second = coordinator(records: store)
+        second.onControl(offerEnvelope(tid: 2, name: "large.bin", size: data.count))
+        let offset = try XCTUnwrap(sentControl.last?.payload.objectValue?["offset"]?.numberValue)
+        XCTAssertEqual(UInt64(offset), UInt64(cut))
+    }
+
+    func testFileSenderInfersMimeTypeFromExtension() throws {
+        let file = sourceDirectory.appendingPathComponent("report.pdf")
+        try payload(16).write(to: file)
+        let sender = try FileSender(url: file)
+
+        XCTAssertEqual(sender.offer(transferId: 1).mime, "application/pdf")
+    }
+
+    func testCancelTransferDiscardsPartialAndNotifiesPeer() throws {
+        let store = recordStore()
+        let coordinator = coordinator(records: store)
+
+        coordinator.onControl(offerEnvelope(tid: 11, name: "abort.bin", size: 200 * 1024))
+        coordinator.onBinary(try BinaryFrame(transferId: 11, offset: 0, data: payload(64 * 1024)).encoded())
+        let partFile = directory.appendingPathComponent("abort.bin.part")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: partFile.path))
+
+        coordinator.cancel(transferId: 11)
+
+        XCTAssertNil(coordinator.progress[11])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: partFile.path))
+        XCTAssertEqual(store.count(), 0)
+        XCTAssertEqual(sentControl.last?.type, "file.cancel")
+    }
+
+    func testCompletedReceiveRecordsDestinationURL() throws {
+        let data = payload(1024)
+        let coordinator = coordinator()
+        coordinator.onControl(offerEnvelope(tid: 3, name: "saved.txt", size: data.count))
+        coordinator.onBinary(try BinaryFrame(transferId: 3, offset: 0, data: data).encoded())
+        let hash = Data(SHA256.hash(data: data)).map { String(format: "%02x", $0) }.joined()
+        coordinator.onControl(
+            Envelope(type: "file.complete", payload: .object([
+                "tid": .number(3),
+                "sha256": .string(hash)
+            ]))
+        )
+
+        XCTAssertEqual(coordinator.destinations[3]?.lastPathComponent, "saved.txt")
+    }
+
     private final class ChunkCounter: @unchecked Sendable {
         private let lock = NSLock()
         private var bytes = 0

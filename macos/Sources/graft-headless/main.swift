@@ -83,17 +83,11 @@ do {
             return
         }
 
-        // Frames are queued; a close that runs immediately after a send can drop the frame, so the
-        // close is deferred until the last send is handed to the network stack.
-        var pendingSends = 0
         var sentClipboard = false
         let session = ConnectionSession(
             service: service,
             send: { envelope in
-                pendingSends += 1
-                try? connection.send(envelope) {
-                    pendingSends -= 1
-                }
+                try? connection.send(envelope)
             },
             close: {
                 // Give queued frames a moment to flush, then close. Without this a protocol error
@@ -105,7 +99,6 @@ do {
         )
         session.peerFingerprint = peerFingerprint
         session.start()
-        _ = pendingSends
 
         let key = ObjectIdentifier(connection)
         withSessions { sessions[key] = session }

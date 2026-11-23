@@ -26,6 +26,12 @@ private const val MAX_BACKLOG_BYTES = 4L * 1024 * 1024
 /** How often a partial receive is written to the resume store. */
 private const val RESUME_SAVE_INTERVAL = 1024L * 1024
 
+/** How often background send progress notifies the UI. */
+private const val SEND_PROGRESS_INTERVAL = 512L * 1024
+
+/** Protocol §3.1: a receive with no chunk for 30 seconds fails and removes its partial file. */
+const val STALL_TIMEOUT_MILLIS = 30_000L
+
 enum class TransferFailureKind {
     UNPAIRED_PEER,
     DUPLICATE_TRANSFER,
@@ -36,6 +42,9 @@ enum class TransferFailureKind {
 
     /** The peer refused the offer. */
     REJECTED,
+
+    /** No chunk arrived within 30 seconds. */
+    STALLED,
 }
 
 /**
@@ -50,11 +59,18 @@ class TransferCoordinator(
     private val backlog: () -> Long = { 0 },
     private val records: TransferRecordStore? = null,
     private val receiversFactory: FileReceivingFactory = DirectoryFileReceiving.factory(directory),
+    private val sendRunner: ((() -> Unit) -> Unit)? = null,
+    private val onProgressChanged: (() -> Unit)? = null,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val receivers = mutableMapOf<UInt, FileReceiving>()
     private val senders = mutableMapOf<UInt, FileSender>()
     private val offers = mutableMapOf<UInt, FileOffer>()
     private val persistedBytes = mutableMapOf<UInt, Long>()
+    private val lastReceiveActivity = mutableMapOf<UInt, Long>()
+    private val activeSends = mutableSetOf<UInt>()
+    private val cancelledSends = java.util.concurrent.ConcurrentHashMap.newKeySet<UInt>()
+    @Volatile private var cancelledAll = false
 
     init {
         records?.purgeExpired()
@@ -65,25 +81,89 @@ class TransferCoordinator(
     val completed: MutableSet<UInt> = mutableSetOf()
 
     /** Where each committed receive landed, for the row's Open action. */
-    val locations: MutableMap<UInt, String> = mutableMapOf()
+    val locations: MutableMap<UInt, String> = java.util.concurrent.ConcurrentHashMap()
+
+    /** Thread-safe snapshot of in-flight and completed progress for UI observers. */
+    @Synchronized
+    fun progressSnapshot(): Map<UInt, TransferProgress> = progress.toMap()
+
+    /** Thread-safe snapshot of finished transfer IDs and their failure reasons. */
+    @Synchronized
+    fun finishedSnapshot(): Pair<Set<UInt>, Map<UInt, TransferFailureKind>> =
+        completed.toSet() to failures.toMap()
+
+    /** Fails any active receive with no chunk for [STALL_TIMEOUT_MILLIS] and deletes its partial file. */
+    @Synchronized
+    fun checkStalls(nowMillis: Long = clock()): Boolean {
+        val stalled = lastReceiveActivity.entries
+            .filter { (tid, last) -> receivers.containsKey(tid) && nowMillis - last >= STALL_TIMEOUT_MILLIS }
+            .map { it.key }
+        if (stalled.isEmpty()) return false
+
+        for (tid in stalled) {
+            runCatching { receivers.remove(tid)?.discard() }
+            persistedBytes.remove(tid)
+            lastReceiveActivity.remove(tid)
+            offers[tid]?.let { records?.remove(it.name, directory.path) }
+            failures[tid] = TransferFailureKind.STALLED
+            runCatching {
+                sendControl(envelope("file.cancel", buildJsonObject { put("tid", JsonPrimitive(tid.toLong())) }))
+            }
+        }
+        return true
+    }
+
+    /** Cancels a single in-flight transfer (send or receive), notifies the peer, and cleans up. */
+    @Synchronized
+    fun cancel(transferId: UInt) {
+        var didCancel = false
+        receivers.remove(transferId)?.let { receiver ->
+            runCatching { receiver.discard() }
+            persistedBytes.remove(transferId)
+            lastReceiveActivity.remove(transferId)
+            offers[transferId]?.let { records?.remove(it.name, directory.path) }
+            didCancel = true
+        }
+        if (senders.remove(transferId) != null || activeSends.remove(transferId)) {
+            cancelledSends.add(transferId)
+            didCancel = true
+        }
+        progress.remove(transferId)
+        offers.remove(transferId)
+
+        if (didCancel) {
+            runCatching {
+                sendControl(envelope("file.cancel", buildJsonObject { put("tid", JsonPrimitive(transferId.toLong())) }))
+            }
+            onProgressChanged?.invoke()
+        }
+    }
 
     /** Cancels everything in flight; called when a session ends so partial rows do not linger. */
     @Synchronized
     fun cancelAll() {
-        receivers.values.forEach { runCatching { it.cancel() } }
+        cancelledAll = true
+        receivers.forEach { (tid, receiver) ->
+            persistResume(tid, receiver, force = true)
+            runCatching { receiver.cancel() }
+        }
         receivers.clear()
-        senders.keys.forEach { senders.remove(it) }
+        persistedBytes.clear()
+        lastReceiveActivity.clear()
+        senders.clear()
+        activeSends.clear()
+        cancelledSends.clear()
         offers.clear()
         progress.clear()
     }
 
     @Synchronized
-    fun offer(file: File, transferId: UInt): FileOffer {
+    fun offer(file: File, transferId: UInt, mime: String = "application/octet-stream"): FileOffer {
         require(senders[transferId] == null) { "transfer ${transferId} is already active" }
 
         val sender = FileSender(file)
         senders[transferId] = sender
-        val offer = sender.offer(transferId.toInt())
+        val offer = sender.offer(transferId.toInt(), mime = mime)
         offers[transferId] = offer
         progress[transferId] = TransferProgress(
             name = offer.name,
@@ -126,12 +206,16 @@ class TransferCoordinator(
 
     @Synchronized
     fun onBinary(raw: ByteArray) {
-        val frame = runCatching { BinaryFrame.decode(raw) }.getOrNull() ?: return
+        val frame = runCatching { BinaryFrame.decode(raw) }.getOrNull()
+        if (frame == null) {
+            sendControl(errorEnvelope("bad_payload", "invalid binary frame"))
+            return
+        }
         val receiver = receivers[frame.transferId] ?: return
+        lastReceiveActivity[frame.transferId] = clock()
 
         try {
             receiver.write(frame)
-            recordProgress(frame.transferId, receiver)
             persistResume(frame.transferId, receiver)
             progress[frame.transferId] = TransferProgress(
                 name = progress[frame.transferId]?.name ?: "file",
@@ -143,11 +227,15 @@ class TransferCoordinator(
             failures[frame.transferId] = TransferFailureKind.READ_FAILED
             runCatching { receiver.cancel() }
             receivers.remove(frame.transferId)
+            persistedBytes.remove(frame.transferId)
+            lastReceiveActivity.remove(frame.transferId)
             sendControl(errorEnvelope("bad_payload", "could not save the file"))
         } catch (error: FileReceiverException) {
             failures[frame.transferId] = TransferFailureKind.WRONG_OFFSET
             runCatching { receiver.cancel() }
             receivers.remove(frame.transferId)
+            persistedBytes.remove(frame.transferId)
+            lastReceiveActivity.remove(frame.transferId)
             sendControl(errorEnvelope("bad_payload", "chunk at the wrong offset"))
         }
     }
@@ -155,15 +243,17 @@ class TransferCoordinator(
     /**
      * Remembers where an interrupted receive stopped.
      *
-     * Writing the record per chunk would hit the disk 16 times a megabyte, so it is written once a
-     * megabyte and again when the transfer ends.
+     * Writes on the first chunk, then once per megabyte, and again when forced on cancel/stop so
+     * disk I/O stays low while partial transfers remain resumable at their exact byte offset.
      */
-    private fun persistResume(tid: UInt, receiver: FileReceiving) {
+    private fun persistResume(tid: UInt, receiver: FileReceiving, force: Boolean = false) {
         val store = records ?: return
         val offer = offers[tid] ?: return
         val confirmed = receiver.confirmedBytes
-        val last = persistedBytes[tid] ?: 0L
-        if (confirmed - last < RESUME_SAVE_INTERVAL) return
+        if (confirmed <= 0L) return
+        val last = persistedBytes[tid]
+        if (!force && last != null && confirmed - last < RESUME_SAVE_INTERVAL) return
+        if (last == confirmed) return
         persistedBytes[tid] = confirmed
         store.upsert(
             ResumeRecord(
@@ -210,11 +300,15 @@ class TransferCoordinator(
             return
         }
 
+        val mime = payload["mime"]?.jsonPrimitive?.content
+            ?.takeIf { it.isNotBlank() }
+            ?: "application/octet-stream"
+
         val offer = FileOffer(
             transferId = tid,
             name = safeName,
             size = size.toULong(),
-            mime = "application/octet-stream",
+            mime = mime,
         )
         offers[tid] = offer
 
@@ -227,6 +321,7 @@ class TransferCoordinator(
             val resumeFrom = stored?.bytesConfirmed ?: 0
             val offset = receiver.begin(offer, resumeFrom)
             receivers[tid] = receiver
+            lastReceiveActivity[tid] = clock()
             progress[tid] = TransferProgress(
                 name = safeName,
                 confirmed = offset,
@@ -250,44 +345,104 @@ class TransferCoordinator(
         val tid = payload?.get("tid")?.jsonPrimitive?.longOrNull?.toUInt() ?: return
         val offset = payload?.get("offset")?.jsonPrimitive?.longOrNull ?: return
         val sender = senders[tid] ?: return
+        if (!activeSends.add(tid)) return
+        cancelledAll = false
+        cancelledSends.remove(tid)
 
+        val runner = sendRunner
+        if (runner != null) {
+            runner { streamSend(tid, offset, sender) }
+        } else {
+            streamSend(tid, offset, sender)
+        }
+    }
+
+    private fun streamSend(tid: UInt, offset: Long, sender: FileSender) {
         try {
+            var published = offset
             for (frame in sender.stream(tid.toInt(), offset)) {
-                awaitDrain()
+                if (isSendCancelled(tid)) {
+                    cleanupCancelledSend(tid)
+                    return
+                }
+                awaitDrain(tid)
+                if (isSendCancelled(tid)) {
+                    cleanupCancelledSend(tid)
+                    return
+                }
                 if (!sendBinary(frame.encoded())) {
                     // OkHttp closes the socket when its queue overflows; stopping here keeps the
                     // failure visible instead of reporting progress into a dead connection.
-                    failures[tid] = TransferFailureKind.READ_FAILED
-                    senders.remove(tid)
+                    synchronized(this) {
+                        failures[tid] = TransferFailureKind.READ_FAILED
+                        senders.remove(tid)
+                        activeSends.remove(tid)
+                    }
+                    onProgressChanged?.invoke()
                     return
                 }
+                val confirmed = frame.offset.toLong() + frame.data.size
+                synchronized(this) {
+                    progress[tid] = TransferProgress(
+                        name = sender.name,
+                        confirmed = confirmed,
+                        total = sender.size,
+                        direction = TransferDirection.send,
+                    )
+                }
+                if (confirmed - published >= SEND_PROGRESS_INTERVAL || confirmed == sender.size) {
+                    published = confirmed
+                    onProgressChanged?.invoke()
+                }
+            }
+            if (isSendCancelled(tid)) {
+                cleanupCancelledSend(tid)
+                return
+            }
+            val digest = sender.sha256()
+            sendControl(
+                envelope("file.complete", buildJsonObject {
+                    put("tid", JsonPrimitive(tid.toLong()))
+                    put("sha256", JsonPrimitive(digest))
+                })
+            )
+            // Nothing acks a completed send, so record it here or it stays "in progress" forever.
+            synchronized(this) {
+                completed.add(tid)
+                senders.remove(tid)
+                activeSends.remove(tid)
                 progress[tid] = TransferProgress(
                     name = sender.name,
-                    confirmed = frame.offset.toLong() + frame.data.size,
+                    confirmed = sender.size,
                     total = sender.size,
                     direction = TransferDirection.send,
                 )
             }
-            sendControl(
-                envelope("file.complete", buildJsonObject {
-                    put("tid", JsonPrimitive(tid.toLong()))
-                    put("sha256", JsonPrimitive(sender.sha256()))
-                })
-            )
-            // Nothing acks a completed send, so record it here or it stays "in progress" forever.
-            completed.add(tid)
-            senders.remove(tid)
-            progress[tid] = TransferProgress(
-                name = sender.name,
-                confirmed = sender.size,
-                total = sender.size,
-                direction = TransferDirection.send,
-            )
+            onProgressChanged?.invoke()
         } catch (error: Exception) {
-            failures[tid] = TransferFailureKind.READ_FAILED
-            senders.remove(tid)
-            sendControl(errorEnvelope("bad_payload", "could not read the file"))
+            if (isSendCancelled(tid)) {
+                cleanupCancelledSend(tid)
+                return
+            }
+            synchronized(this) {
+                failures[tid] = TransferFailureKind.READ_FAILED
+                senders.remove(tid)
+                activeSends.remove(tid)
+            }
+            runCatching { sendControl(errorEnvelope("bad_payload", "could not read the file")) }
+            onProgressChanged?.invoke()
         }
+    }
+
+    private fun isSendCancelled(tid: UInt): Boolean = cancelledAll || cancelledSends.contains(tid)
+
+    private fun cleanupCancelledSend(tid: UInt) {
+        synchronized(this) {
+            senders.remove(tid)
+            activeSends.remove(tid)
+            cancelledSends.remove(tid)
+        }
+        onProgressChanged?.invoke()
     }
 
     /**
@@ -297,9 +452,10 @@ class TransferCoordinator(
      * OkHttp drops the connection. Gives up after ten seconds so a stuck socket fails the transfer
      * instead of blocking the reader forever.
      */
-    private fun awaitDrain() {
+    private fun awaitDrain(tid: UInt) {
         val deadline = System.currentTimeMillis() + 10_000
         while (backlog() > MAX_BACKLOG_BYTES) {
+            if (isSendCancelled(tid)) return
             if (System.currentTimeMillis() > deadline) {
                 throw java.io.IOException("socket stalled")
             }
@@ -311,6 +467,7 @@ class TransferCoordinator(
         val tid = tidOf(envelope) ?: return
         failures[tid] = TransferFailureKind.REJECTED
         senders.remove(tid)
+        activeSends.remove(tid)
     }
 
     private fun handleComplete(envelope: Envelope) {
@@ -333,6 +490,8 @@ class TransferCoordinator(
                 direction = TransferDirection.receive,
             )
             receivers.remove(tid)
+            persistedBytes.remove(tid)
+            lastReceiveActivity.remove(tid)
         } catch (error: FileReceiverException) {
             failures[tid] = if (error.kind == FileReceiverErrorKind.HASH_MISMATCH) {
                 TransferFailureKind.HASH_MISMATCH
@@ -341,6 +500,8 @@ class TransferCoordinator(
             }
             runCatching { receiver.cancel() }
             receivers.remove(tid)
+            persistedBytes.remove(tid)
+            lastReceiveActivity.remove(tid)
             // A corrupt partial must not be resumed onto, so the record goes with it.
             offers[tid]?.let { records?.remove(it.name, directory.path) }
             sendControl(errorEnvelope("hash_mismatch", "hash mismatch"))
@@ -349,23 +510,16 @@ class TransferCoordinator(
 
     private fun handleCancel(envelope: Envelope) {
         val tid = tidOf(envelope) ?: return
-        receivers[tid]?.cancel()
+        receivers[tid]?.let { receiver ->
+            persistResume(tid, receiver, force = true)
+            receiver.cancel()
+        }
         receivers.remove(tid)
+        persistedBytes.remove(tid)
+        lastReceiveActivity.remove(tid)
         senders.remove(tid)
-    }
-
-    private fun recordProgress(tid: UInt, receiver: FileReceiving) {
-        val store = records ?: return
-        val offer = offers[tid] ?: return
-        store.upsert(
-            ResumeRecord(
-                name = offer.name,
-                directory = directory.path,
-                size = offer.size.toLong(),
-                bytesConfirmed = receiver.confirmedBytes,
-                updatedAtMillis = System.currentTimeMillis(),
-            )
-        )
+        progress.remove(tid)
+        cancelledSends.add(tid)
     }
 
     private fun tidOf(envelope: Envelope): UInt? = runCatching {

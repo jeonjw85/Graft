@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import GraftProtocol
+import UniformTypeIdentifiers
 
 public enum FileSenderError: Error, Equatable {
     case unreadableFile
@@ -34,8 +35,11 @@ public final class FileSender: @unchecked Sendable {
         self.chunkSize = min(chunkSize, BinaryFrame.maxDataSize)
     }
 
-    public func offer(transferId: UInt32, mime: String = "application/octet-stream") -> FileOffer {
-        FileOffer(transferId: transferId, name: name, size: size, mime: mime)
+    public func offer(transferId: UInt32, mime: String? = nil) -> FileOffer {
+        let resolvedMime = mime
+            ?? UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+            ?? "application/octet-stream"
+        return FileOffer(transferId: transferId, name: name, size: size, mime: resolvedMime)
     }
 
     /// Opens the file at `offset` and returns frames from there.

@@ -19,13 +19,14 @@ public struct TransferProgress: Equatable, Sendable {
     }
 }
 
-public enum TransferFailure: Error, Equatable {
+public enum TransferFailure: String, Error, Equatable, Codable, Sendable {
     case unpairedPeer
     case duplicateTransfer
     case unsafeName
     case wrongOffset
     case hashMismatch
     case diskFull
+    case stalled
 }
 
 /// Runs file transfers for one connection: answers offers, writes incoming data, and streams
@@ -41,21 +42,27 @@ public final class TransferCoordinator: @unchecked Sendable {
         case both
     }
 
-    private let directory: URL
+    public var directory: URL
     private let isPaired: () -> Bool
     private let mode: Mode
     private let sendControl: (Envelope) -> Void
     private let sendBinary: (Data) -> Void
-    private let sendBinaryAsync: ((Data, @escaping () -> Void) -> Void)?
+    private let sendBinaryAsync: ((Data, @escaping @Sendable () -> Void) -> Void)?
     private let records: TransferRecordStore?
+    private let clock: () -> Date
 
     /// How many 64 KiB frames may be in the socket queue at once (1 MiB).
     private static let sendWindowSize = 16
+    /// How often a partial receive is written to the resume store (1 MiB).
+    private static let resumeSaveInterval: UInt64 = 1024 * 1024
+    /// Protocol §3.1: a receive with no chunk for 30 seconds fails and removes its partial file.
+    public static let stallTimeout: TimeInterval = 30
     private let sendWindow = DispatchSemaphore(value: sendWindowSize)
     private let sendQueue = DispatchQueue(label: "kr.jjw.graft.send", qos: .utility)
     private let sendLock = NSLock()
     private var sendCancelled = false
     private var activeSends: Set<UInt32> = []
+    private var cancelledSends: Set<UInt32> = []
 
     /// Called on the main queue when send progress moves, so the UI can refresh.
     public var onProgress: ((UInt32) -> Void)?
@@ -64,10 +71,14 @@ public final class TransferCoordinator: @unchecked Sendable {
     private var senders: [UInt32: FileSender] = [:]
     private var offers: [UInt32: FileOffer] = [:]
     private var pendingSends: [UInt32: URL] = [:]
+    private var persistedBytes: [UInt32: UInt64] = [:]
+    private var lastReceiveActivity: [UInt32: Date] = [:]
 
     public private(set) var progress: [UInt32: TransferProgress] = [:]
     public private(set) var failures: [UInt32: TransferFailure] = [:]
     public private(set) var completed: Set<UInt32> = []
+    /// Where each finished received file was saved on disk, keyed by transfer id.
+    public private(set) var destinations: [UInt32: URL] = [:]
 
     public init(
         directory: URL,
@@ -75,8 +86,9 @@ public final class TransferCoordinator: @unchecked Sendable {
         isPaired: @escaping () -> Bool,
         sendControl: @escaping (Envelope) -> Void,
         sendBinary: @escaping (Data) -> Void,
-        sendBinaryAsync: ((Data, @escaping () -> Void) -> Void)? = nil,
-        records: TransferRecordStore? = nil
+        sendBinaryAsync: ((Data, @escaping @Sendable () -> Void) -> Void)? = nil,
+        records: TransferRecordStore? = nil,
+        clock: @escaping () -> Date = Date.init
     ) {
         self.directory = directory
         self.mode = mode
@@ -85,6 +97,7 @@ public final class TransferCoordinator: @unchecked Sendable {
         self.sendBinary = sendBinary
         self.sendBinaryAsync = sendBinaryAsync
         self.records = records
+        self.clock = clock
         records?.purgeExpired()
     }
 
@@ -128,12 +141,16 @@ public final class TransferCoordinator: @unchecked Sendable {
     }
 
     public func onBinary(_ data: Data) {
-        guard let frame = try? BinaryFrame.decode(data) else { return }
+        guard let frame = try? BinaryFrame.decode(data) else {
+            sendControl(errorEnvelope(code: "bad_payload", message: "invalid binary frame"))
+            return
+        }
         guard let receiver = receivers[frame.transferId] else { return }
+        lastReceiveActivity[frame.transferId] = clock()
 
         do {
             try receiver.write(frame)
-            recordProgress(frame.transferId, receiver)
+            persistResume(frame.transferId, receiver)
             progress[frame.transferId] = TransferProgress(
                 name: progress[frame.transferId]?.name ?? "file",
                 confirmed: receiver.confirmedBytes,
@@ -143,8 +160,10 @@ public final class TransferCoordinator: @unchecked Sendable {
         } catch {
             let full = (error as NSError).code == NSFileWriteOutOfSpaceError
             failures[frame.transferId] = full ? .diskFull : .wrongOffset
-            try? receiver.cancel()
+            receiver.cancel()
             receivers.removeValue(forKey: frame.transferId)
+            persistedBytes.removeValue(forKey: frame.transferId)
+            lastReceiveActivity.removeValue(forKey: frame.transferId)
             sendControl(
                 errorEnvelope(
                     code: full ? "disk_full" : "bad_payload",
@@ -176,7 +195,9 @@ public final class TransferCoordinator: @unchecked Sendable {
             return
         }
 
-        let offer = FileOffer(transferId: tid, name: name, size: size, mime: "application/octet-stream")
+        let mime = payload["mime"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+            ?? "application/octet-stream"
+        let offer = FileOffer(transferId: tid, name: name, size: size, mime: mime)
         offers[tid] = offer
 
         do {
@@ -192,6 +213,7 @@ public final class TransferCoordinator: @unchecked Sendable {
             )
             let offset = try receiver.begin(offer, resumeOffset: stored?.bytesConfirmed ?? 0)
             receivers[tid] = receiver
+            lastReceiveActivity[tid] = clock()
             progress[tid] = TransferProgress(
                 name: name,
                 confirmed: offset,
@@ -261,7 +283,7 @@ public final class TransferCoordinator: @unchecked Sendable {
             do {
                 var published: UInt64 = offset
                 try sender.forEachChunk(transferId: tid, from: offset) { frame in
-                    try self.awaitWindow()
+                    try self.awaitWindow(tid: tid)
                     let data = frame.encoded()
                     self.sendBinaryAsync?(data) { self.sendWindow.signal() }
                     let confirmed = frame.offset + UInt64(frame.data.count)
@@ -282,6 +304,10 @@ public final class TransferCoordinator: @unchecked Sendable {
                 let digest = try sender.sha256()
                 DispatchQueue.main.async {
                     self.finishSend(tid: tid, sender: sender, digest: digest)
+                }
+            } catch TransportFailure.cancelled {
+                DispatchQueue.main.async {
+                    self.cleanupCancelledSend(tid: tid)
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -322,14 +348,26 @@ public final class TransferCoordinator: @unchecked Sendable {
         onProgress?(tid)
     }
 
-    /// Waits for room in the socket queue, but gives up if the connection went away.
-    private func awaitWindow() throws {
-        while sendWindow.wait(timeout: .now() + 0.5) == .timedOut {
+    private func cleanupCancelledSend(tid: UInt32) {
+        senders.removeValue(forKey: tid)
+        sendLock.lock()
+        activeSends.remove(tid)
+        cancelledSends.remove(tid)
+        sendLock.unlock()
+        onProgress?(tid)
+    }
+
+    /// Waits for room in the socket queue, but gives up if the connection went away or the send was cancelled.
+    private func awaitWindow(tid: UInt32) throws {
+        while true {
             sendLock.lock()
-            let stopped = sendCancelled
+            let stopped = sendCancelled || cancelledSends.contains(tid)
             sendLock.unlock()
             if stopped {
                 throw TransportFailure.cancelled
+            }
+            if sendWindow.wait(timeout: .now() + 0.5) == .success {
+                return
             }
         }
     }
@@ -346,11 +384,71 @@ public final class TransferCoordinator: @unchecked Sendable {
         }
     }
 
-    /// Stops every send when the connection dies; the background loop exits on the next frame.
+    /// Fails any active receive that has not received a chunk within `stallTimeout` (30 s) and
+    /// removes its partial file per protocol §3.1.
+    @discardableResult
+    public func checkStalls(now: Date? = nil) -> Bool {
+        let current = now ?? clock()
+        let stalledIds = lastReceiveActivity.compactMap { tid, last -> UInt32? in
+            guard receivers[tid] != nil, current.timeIntervalSince(last) >= Self.stallTimeout else {
+                return nil
+            }
+            return tid
+        }
+        guard !stalledIds.isEmpty else { return false }
+
+        for tid in stalledIds {
+            receivers[tid]?.discard()
+            receivers.removeValue(forKey: tid)
+            persistedBytes.removeValue(forKey: tid)
+            lastReceiveActivity.removeValue(forKey: tid)
+            offers[tid].map { records?.remove(name: $0.name, directory: directory.path) }
+            failures[tid] = .stalled
+            sendControl(controlEnvelope(type: "file.cancel", payload: ["tid": .number(Double(tid))]))
+        }
+        return true
+    }
+
+    /// Cancels a single in-flight transfer (send or receive), notifies the peer, and cleans up.
+    public func cancel(transferId tid: UInt32) {
+        var didCancel = false
+        if let receiver = receivers.removeValue(forKey: tid) {
+            receiver.discard()
+            persistedBytes.removeValue(forKey: tid)
+            lastReceiveActivity.removeValue(forKey: tid)
+            offers[tid].map { records?.remove(name: $0.name, directory: directory.path) }
+            didCancel = true
+        }
+        sendLock.lock()
+        let wasActiveSend = activeSends.contains(tid)
+        if wasActiveSend || senders[tid] != nil {
+            cancelledSends.insert(tid)
+            didCancel = true
+        }
+        sendLock.unlock()
+        senders.removeValue(forKey: tid)
+        progress.removeValue(forKey: tid)
+        offers.removeValue(forKey: tid)
+
+        if didCancel {
+            sendControl(controlEnvelope(type: "file.cancel", payload: ["tid": .number(Double(tid))]))
+            onProgress?(tid)
+        }
+    }
+
+    /// Stops every send when the connection dies and flushes exact resume checkpoints for active receives.
     public func cancelAll() {
+        for (tid, receiver) in receivers {
+            persistResume(tid, receiver, force: true)
+            receiver.cancel()
+        }
+        receivers.removeAll()
+        persistedBytes.removeAll()
+        lastReceiveActivity.removeAll()
         sendLock.lock()
         sendCancelled = true
         activeSends.removeAll()
+        cancelledSends.removeAll()
         sendLock.unlock()
     }
 
@@ -375,6 +473,7 @@ public final class TransferCoordinator: @unchecked Sendable {
         do {
             let url = try receiver.finish(expectedSha256: expected)
             completed.insert(tid)
+            destinations[tid] = url
             offers[tid].map { records?.remove(name: $0.name, directory: directory.path) }
             progress[tid] = TransferProgress(
                 name: url.lastPathComponent,
@@ -383,23 +482,38 @@ public final class TransferCoordinator: @unchecked Sendable {
                 direction: .receive
             )
             receivers.removeValue(forKey: tid)
+            persistedBytes.removeValue(forKey: tid)
+            lastReceiveActivity.removeValue(forKey: tid)
         } catch FileReceiverError.hashMismatch {
             failures[tid] = .hashMismatch
             // A corrupt partial must not be resumed onto.
             offers[tid].map { records?.remove(name: $0.name, directory: directory.path) }
             receivers.removeValue(forKey: tid)
+            persistedBytes.removeValue(forKey: tid)
+            lastReceiveActivity.removeValue(forKey: tid)
             sendControl(errorEnvelope(code: "hash_mismatch", message: "hash mismatch"))
         } catch {
             failures[tid] = .wrongOffset
             receivers.removeValue(forKey: tid)
+            persistedBytes.removeValue(forKey: tid)
+            lastReceiveActivity.removeValue(forKey: tid)
         }
     }
 
     private func handleCancel(_ envelope: Envelope) {
         guard let tid = tid(from: envelope) else { return }
-        receivers[tid]?.cancel()
+        if let receiver = receivers[tid] {
+            persistResume(tid, receiver, force: true)
+            receiver.cancel()
+        }
         receivers.removeValue(forKey: tid)
+        persistedBytes.removeValue(forKey: tid)
+        lastReceiveActivity.removeValue(forKey: tid)
         senders.removeValue(forKey: tid)
+        progress.removeValue(forKey: tid)
+        sendLock.lock()
+        cancelledSends.insert(tid)
+        sendLock.unlock()
     }
 
     // MARK: - Helpers
@@ -408,14 +522,23 @@ public final class TransferCoordinator: @unchecked Sendable {
         envelope.payload.objectValue?["tid"]?.uint32Value
     }
 
-    private func recordProgress(_ transferId: UInt32, _ receiver: FileReceiver) {
+    /// Writes the resume checkpoint on the first chunk, every 1 MiB, or when forced on stop/cancel.
+    private func persistResume(_ transferId: UInt32, _ receiver: FileReceiver, force: Bool = false) {
         guard let records, let offer = offers[transferId] else { return }
+        let confirmed = receiver.confirmedBytes
+        guard confirmed > 0 else { return }
+        let last = persistedBytes[transferId]
+        if !force, let last, confirmed - last < Self.resumeSaveInterval {
+            return
+        }
+        if last == confirmed { return }
+        persistedBytes[transferId] = confirmed
         records.upsert(
             ResumeRecord(
                 name: offer.name,
                 directory: directory.path,
                 size: offer.size,
-                bytesConfirmed: receiver.confirmedBytes,
+                bytesConfirmed: confirmed,
                 updatedAtMillis: Int64(Date().timeIntervalSince1970 * 1000)
             )
         )

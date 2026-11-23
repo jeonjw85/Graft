@@ -21,6 +21,9 @@ interface FileReceiving {
 
     fun cancel()
 
+    /** Cancels and deletes any partial output on disk (used on 30 s stall timeout). */
+    fun discard() = cancel()
+
     val confirmedBytes: Long
 
     /**
@@ -56,6 +59,11 @@ class DirectoryFileReceiving(private val receiver: FileReceiver) : FileReceiving
     override fun cancel() {
         committedPath = null
         receiver.cancel()
+    }
+
+    override fun discard() {
+        committedPath = null
+        receiver.discard()
     }
 
     override val confirmedBytes: Long get() = receiver.confirmedBytes

@@ -346,4 +346,117 @@ class TransferCoordinatorTest {
 
         assertFalse(runCatching { coordinator.offer(file, 5u) }.isSuccess)
     }
+
+    @Test
+    fun `stalled receive times out and removes partial file`() {
+        var now = 1_762_752_000_000L
+        val store = records()
+        val coordinator = TransferCoordinator(
+            directory = directory.toFile(),
+            isPaired = { true },
+            sendControl = { sentControl.add(it) },
+            sendBinary = { true },
+            records = store,
+            clock = { now },
+        )
+
+        coordinator.onControl(offerEnvelope(4u, "stalled.bin", 128 * 1024))
+        coordinator.onBinary(BinaryFrame(4u, 0uL, payload(64 * 1024)).encoded())
+        val partFile = File(directory.toFile(), "stalled.bin.part")
+        assertTrue(partFile.exists())
+
+        now += STALL_TIMEOUT_MILLIS - 1
+        assertFalse(coordinator.checkStalls(now))
+
+        now += 1
+        assertTrue(coordinator.checkStalls(now))
+        assertEquals(TransferFailureKind.STALLED, coordinator.failures[4u])
+        assertFalse(partFile.exists())
+        assertEquals(0, store.count())
+        assertEquals("file.cancel", sentControl.last().type)
+    }
+
+    @Test
+    fun `cancelAll flushes exact offset for resuming large partial`() {
+        val data = payload(1_500 * 1024)
+        val cut = 1_200 * 1024
+        val store = records()
+
+        val first = coordinator(records = store)
+        first.onControl(offerEnvelope(1u, "large.bin", data.size))
+        var offset = 0
+        while (offset < cut) {
+            val end = minOf(offset + 64 * 1024, cut)
+            first.onBinary(BinaryFrame(1u, offset.toULong(), data.copyOfRange(offset, end)).encoded())
+            offset = end
+        }
+        first.cancelAll()
+
+        sentControl.clear()
+        val second = coordinator(records = store)
+        second.onControl(offerEnvelope(2u, "large.bin", data.size))
+        val resumed = sentControl.last().payload.jsonObject["offset"]?.jsonPrimitive?.content?.toLong()
+        assertEquals(cut.toLong(), resumed)
+    }
+
+    @Test
+    fun `async sendRunner streams off the control loop and notifies progress`() {
+        val data = payload(200 * 1024)
+        val file = File(directory.toFile(), "async.bin")
+        file.writeBytes(data)
+
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var progressCalls = 0
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            val coordinator = TransferCoordinator(
+                directory = directory.toFile(),
+                isPaired = { true },
+                sendControl = { envelope ->
+                    sentControl.add(envelope)
+                    if (envelope.type == "file.complete") latch.countDown()
+                },
+                sendBinary = { bytes -> sentBinary.add(bytes); true },
+                sendRunner = { block -> executor.execute(block) },
+                onProgressChanged = { progressCalls += 1 },
+            )
+
+            coordinator.offer(file, 7u, mime = "application/pdf")
+            assertEquals("application/pdf", sentControl.last().payload.jsonObject["mime"]?.jsonPrimitive?.content)
+
+            coordinator.onControl(
+                Envelope.create(
+                    "file.accept",
+                    buildJsonObject {
+                        put("tid", JsonPrimitive(7L))
+                        put("offset", JsonPrimitive(0L))
+                    }
+                )
+            )
+
+            assertTrue(latch.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue(progressCalls > 0)
+            assertTrue(coordinator.completed.contains(7u))
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `cancel discards partial file and notifies peer`() {
+        val store = records()
+        val coordinator = coordinator(records = store)
+
+        coordinator.onControl(offerEnvelope(11u, "abort.bin", 200 * 1024))
+        coordinator.onBinary(BinaryFrame(11u, 0uL, payload(64 * 1024)).encoded())
+        val partFile = File(directory.toFile(), "abort.bin.part")
+        assertTrue(partFile.exists())
+
+        coordinator.cancel(11u)
+
+        assertFalse(coordinator.progress.containsKey(11u))
+        assertFalse(partFile.exists())
+        assertEquals(0, store.count())
+        assertEquals("file.cancel", sentControl.last().type)
+    }
 }

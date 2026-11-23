@@ -192,6 +192,13 @@ class FileReceiver(private val directory: File) {
         finished = true
     }
 
+    /** Closes the handle and deletes the partial file on disk (used when a transfer stalls). */
+    fun discard() {
+        cancel()
+        partFile?.delete()
+        written = 0
+    }
+
     val confirmedBytes: Long get() = written
     val partialFile: File? get() = partFile
 }

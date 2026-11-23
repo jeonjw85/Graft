@@ -7,11 +7,15 @@ import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.X509KeyManager
 import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
+import kr.jjw.graft.core.CodecException
 import kr.jjw.graft.core.Envelope
 import kr.jjw.graft.core.MessageCodec
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -88,14 +92,54 @@ class GraftClient(
                 }
 
                 override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
-                    trySend(ConnectionEvent.Binary(bytes.toByteArray()))
+                    // Apply TCP backpressure instead of silently dropping chunks if disk writes lag.
+                    trySendBlocking(ConnectionEvent.Binary(bytes.toByteArray()))
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
-                    val envelope = runCatching {
+                    val envelope = try {
                         MessageCodec.decode(text.toByteArray(Charsets.UTF_8))
-                    }.getOrNull() ?: return
-                    trySend(ConnectionEvent.Message(envelope))
+                    } catch (error: CodecException) {
+                        handleDecodeFailure(webSocket, error)
+                        return
+                    } catch (_: Exception) {
+                        handleDecodeFailure(
+                            webSocket,
+                            CodecException(CodecException.Kind.MALFORMED, "invalid control frame")
+                        )
+                        return
+                    }
+                    trySendBlocking(ConnectionEvent.Message(envelope))
+                }
+
+                private fun handleDecodeFailure(webSocket: WebSocket, error: CodecException) {
+                    when (error.kind) {
+                        CodecException.Kind.OVERSIZED -> {
+                            webSocket.close(1009, "oversized")
+                        }
+                        CodecException.Kind.UNSUPPORTED_VERSION -> {
+                            val reply = Envelope.create(
+                                "error",
+                                buildJsonObject {
+                                    put("code", JsonPrimitive("proto_unsupported"))
+                                    put("message", JsonPrimitive("unsupported protocol version"))
+                                }
+                            )
+                            webSocket.send(MessageCodec.encode(reply).toString(Charsets.UTF_8))
+                            webSocket.close(1002, "proto_unsupported")
+                        }
+                        CodecException.Kind.MALFORMED -> {
+                            val reply = Envelope.create(
+                                "error",
+                                buildJsonObject {
+                                    put("code", JsonPrimitive("bad_payload"))
+                                    put("message", JsonPrimitive("malformed control frame"))
+                                }
+                            )
+                            webSocket.send(MessageCodec.encode(reply).toString(Charsets.UTF_8))
+                            webSocket.close(1002, "bad_payload")
+                        }
+                    }
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {

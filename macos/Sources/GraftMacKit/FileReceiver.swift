@@ -234,6 +234,15 @@ public final class FileReceiver {
         isFinished = true
     }
 
+    /// Closes the handle and deletes the partial file on disk (used when a transfer stalls).
+    public func discard() {
+        cancel()
+        if let partURL {
+            try? fileManager.removeItem(at: partURL)
+        }
+        written = 0
+    }
+
     public var confirmedBytes: UInt64 { written }
 
     /// The partial file, for the resumable record.

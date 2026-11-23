@@ -4,16 +4,30 @@ import UserNotifications
 
 /// The slice of `UNUserNotificationCenter` the presenter needs, so tests do not touch the system.
 public protocol NotificationCenterPort {
-    func add(title: String, body: String)
+    func add(title: String, subtitle: String, body: String)
+    func add(identifier: String, title: String, subtitle: String, body: String, replyable: Bool)
+    func remove(identifier: String)
+}
+
+public extension NotificationCenterPort {
+    func add(title: String, body: String) {
+        add(title: title, subtitle: "", body: body)
+    }
+
+    func add(identifier: String, title: String, subtitle: String, body: String, replyable: Bool) {
+        add(title: title, subtitle: subtitle, body: body)
+    }
+
+    func remove(identifier: String) {}
 }
 
 /// The slice of `UNUserNotificationCenter` that asks for permission, kept separate for tests.
 public protocol NotificationAuthorizationPort {
-    func request(completion: @escaping (Bool) -> Void)
+    func request(completion: @escaping @Sendable (Bool) -> Void)
 }
 
 /// Posts Android notifications as local macOS notifications and keeps a recent list in memory.
-public final class NotificationPresenter {
+public final class NotificationPresenter: @unchecked Sendable {
     public struct Recent: Equatable, Sendable {
         public let app: String
         public let title: String
@@ -70,13 +84,39 @@ public final class NotificationPresenter {
 
         let title = payload["title"]?.stringValue ?? ""
         let postedAt = payload["ts"]?.uint64Value ?? 0
+        let key = payload["key"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? UUID().uuidString
+        let replyable: Bool
+        if case .bool(let flag) = payload["replyable"] {
+            replyable = flag
+        } else {
+            replyable = false
+        }
         let body = Self.truncate(text, maxBytes: Self.maxBodyBytes)
 
-        port.add(title: app, body: showPreviews ? body : "New notification")
+        port.add(
+            identifier: key,
+            title: app,
+            subtitle: showPreviews ? title : "",
+            body: showPreviews ? body : "New notification",
+            replyable: replyable && showPreviews
+        )
         recent.insert(Recent(app: app, title: title, body: body, postedAt: postedAt), at: 0)
         if recent.count > Self.maxRecent {
             recent.removeLast(recent.count - Self.maxRecent)
         }
+        return true
+    }
+
+    /// Removes a previously delivered banner when the phone reports it was dismissed.
+    @discardableResult
+    public func handleRemoval(_ envelope: Envelope) -> Bool {
+        guard envelope.type == "notification.removed" else { return false }
+        guard case .object(let payload) = envelope.payload,
+              let key = payload["key"]?.stringValue,
+              !key.isEmpty else {
+            return false
+        }
+        port.remove(identifier: key)
         return true
     }
 
@@ -104,7 +144,7 @@ public final class NotificationPresenter {
 public struct SystemNotificationAuthorization: NotificationAuthorizationPort {
     public init() {}
 
-    public func request(completion: @escaping (Bool) -> Void) {
+    public func request(completion: @escaping @Sendable (Bool) -> Void) {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
             completion(granted)
         }
@@ -113,17 +153,60 @@ public struct SystemNotificationAuthorization: NotificationAuthorizationPort {
 
 /// Adapter around the real notification center.
 public struct SystemNotificationCenter: NotificationCenterPort {
+    public static let replyCategoryId = "GRAFT_REPLYABLE"
+    public static let defaultCategoryId = "GRAFT_ALERT"
+    public static let replyActionId = "GRAFT_REPLY"
+
     public init() {}
 
-    public func add(title: String, body: String) {
+    /// Registers interactive categories for inline replies and custom dismiss syncing.
+    public static func registerCategories() {
+        let replyAction = UNTextInputNotificationAction(
+            identifier: replyActionId,
+            title: "Reply",
+            options: [],
+            textInputButtonTitle: "Send",
+            textInputPlaceholder: "Reply…"
+        )
+        let replyableCategory = UNNotificationCategory(
+            identifier: replyCategoryId,
+            actions: [replyAction],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+        let defaultCategory = UNNotificationCategory(
+            identifier: defaultCategoryId,
+            actions: [],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([
+            replyableCategory,
+            defaultCategory,
+        ])
+    }
+
+    public func add(title: String, subtitle: String, body: String) {
+        add(identifier: UUID().uuidString, title: title, subtitle: subtitle, body: body, replyable: false)
+    }
+
+    public func add(identifier: String, title: String, subtitle: String, body: String, replyable: Bool) {
         let content = UNMutableNotificationContent()
         content.title = title
+        if !subtitle.isEmpty {
+            content.subtitle = subtitle
+        }
         content.body = body
+        content.categoryIdentifier = replyable ? Self.replyCategoryId : Self.defaultCategoryId
         let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
+            identifier: identifier,
             content: content,
             trigger: nil
         )
         UNUserNotificationCenter.current().add(request)
+    }
+
+    public func remove(identifier: String) {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [identifier])
     }
 }
